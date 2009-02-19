@@ -1,0 +1,10 @@
+{release,
+ {"eadc", "ADC Hub"},
+ {erts, "5.3"},
+ [{kernel, "2.12.3"},
+  {stdlib, "1.15.3"},
+  {sasl, "2.1.5.3"},
+  {eadc, "1.0"}
+  ]
+}.
+
