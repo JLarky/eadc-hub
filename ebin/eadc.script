@@ -1,4 +1,4 @@
-%% script generated at {2009,2,19} {18,57,0}
+%% script generated at {2009,2,19} {21,27,59}
 {script,
     {"eadc","ADC Hub"},
     [{preLoaded,
@@ -46,7 +46,7 @@
           sasl,release_handler_1,release_handler,rb_format_supp,rb,
           overload,misc_supp,format_lib_supp,erlsrv,alarm_handler]},
      {path,["$ROOT/lib/eadc-1.0/ebin"]},
-     {primLoad,[eadc_listener,eadc_client_fsm]},
+     {primLoad,[eadc_utils,eadc_listener,eadc_client_fsm]},
      {progress,modules_loaded},
      {path,
          ["$ROOT/lib/kernel-2.12.3/ebin",
@@ -149,7 +149,7 @@
                   [{description,"ADC-HUB writing in erlang"},
                    {vsn,"1.0"},
                    {id,"eadc"},
-                   {modules,[eadc_listener,eadc_client_fsm]},
+                   {modules,[eadc_listener,eadc_client_fsm,eadc_utils]},
                    {registered,[tcp_server_sup,tcp_listener]},
                    {applications,[kernel,stdlib]},
                    {included_applications,[]},

@@ -12,15 +12,22 @@
 %% FSM States
 -export([
     'WAIT_FOR_SOCKET'/2,
-    'WAIT_FOR_DATA'/2
+    'WAIT_FOR_DATA'/2,
+    'IDENTIFY STAGE'/2,
+    'PROTOCOL STAGE'/2
 ]).
 
 -record(state, {
-                socket,    % client socket
-                addr       % client address
-               }).
+	  socket,    % client socket
+	  addr,      % client address
+	  sid       % client's SID
+	 }).
 
 -define(TIMEOUT, 120000).
+-define(DEBUG(Type, Format, Data), case Type of
+				       debug ->
+					   error_logger:info_msg(Format, Data)
+				   end).
 
 %%%------------------------------------------------------------------------
 %%% API
@@ -70,11 +77,51 @@ init([]) ->
 %%    inet:setopts(Socket, [{active, once}, {packet, 2}, binary]),
     inet:setopts(Socket, [{active, once}, {packet, line}]),
     {ok, {IP, _Port}} = inet:peername(Socket),
-    {next_state, 'WAIT_FOR_DATA', State#state{socket=Socket, addr=IP}, ?TIMEOUT};
+    {next_state, 'PROTOCOL STAGE', State#state{socket=Socket, addr=IP}, ?TIMEOUT};
 'WAIT_FOR_SOCKET'(Other, State) ->
     error_logger:error_msg("State: 'WAIT_FOR_SOCKET'. Unexpected message: ~p\n", [Other]),
     %% Allow to receive async messages
     {next_state, 'WAIT_FOR_SOCKET', State}.
+
+'PROTOCOL STAGE'({data, Data}, #state{socket=Socket} = State) ->
+    ?DEBUG(debug, "Data recived ~w~n", [Data]),
+    case Data of
+	[ $H,$S,$U,$P,$\  | _] ->
+	    ok = gen_tcp:send(Socket, "ISUP ADBASE ADTIGR\n"),
+	    ok = gen_tcp:send(Socket, "ISID FJJRJFJDJDJEJEJDJDJE\n"),
+	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
+	_ ->
+	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
+	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
+    end;
+
+'PROTOCOL STAGE'(timeout,  #state{socket=Socket} = State) ->
+    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out"),
+    error_logger:info_msg("Client '~w' timed out\n", [self()]),
+    {stop, normal, State}.
+
+'IDENTIFY STAGE'({data, Data}, #state{socket=Socket} = State) ->
+    ?DEBUG(debug, "String recived '~s'~n", [Data]),
+    case Data of
+	[ $B,$I,$N,$F,$\ | _] ->
+	    ?DEBUG(debug, "BINF String recived '~s'~n", [Data]),
+	    ok = gen_tcp:send(Socket, Data),
+	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
+	[ $B,$M,$S,$G,$\ | _] ->
+	    ?DEBUG(debug, "BMSG String recived '~s'~n", [Data]),
+	    ok = gen_tcp:send(Socket, Data),
+	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
+	_ ->
+	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
+	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
+    end;
+
+'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
+    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out"),
+    error_logger:info_msg("Client '~w' timed out\n", [self()]),
+    {stop, normal, State}.
+
+
 
 %% Notification event coming from client
 'WAIT_FOR_DATA'({data, Data}, #state{socket=S} = State) ->
@@ -84,7 +131,7 @@ init([]) ->
 
 'WAIT_FOR_DATA'(timeout, State) ->
     error_logger:error_msg("~p Client connection timeout - closing.\n", [self()]),
-    {stop, normal, State};
+     {stop, normal, State};
 
 'WAIT_FOR_DATA'(Data, State) ->
     io:format("~p Ignoring data: ~p\n", [self(), Data]),
@@ -123,7 +170,8 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 handle_info({tcp, Socket, Bin}, StateName, #state{socket=Socket} = StateData) ->
     % Flow control: enable forwarding of next TCP message
     inet:setopts(Socket, [{active, once}]),
-    ?MODULE:StateName({data, Bin}, StateData);
+    Data = binary_to_list(Bin),
+    ?MODULE:StateName({data, Data}, StateData);
 
 handle_info({tcp_closed, Socket}, _StateName,
             #state{socket=Socket, addr=Addr} = StateData) ->
