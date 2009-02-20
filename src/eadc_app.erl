@@ -36,22 +36,30 @@ init({eadc_sup, Port, Module}) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
-              % TCP Listener
+	     %% TCP Listener
 	     {   eadc_sup,                                 % Id       = internal id
-                  {eadc_listener,start_link,[Port,Module]},% StartFun = {M, F, A}
-                  permanent,                               % Restart  = permanent | transient | temporary
-                  2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity
-                  worker,                                  % Type     = worker | supervisor
-                  [eadc_listener]                          % Modules  = [Module] | dynamic
-              },
-              % Client instance supervisor
-              {   eadc_client_sup,
-                  {supervisor,start_link,[{local, eadc_client_sup}, ?MODULE, [Module]]},
-                  permanent,                               % Restart  = permanent | transient | temporary
-                  infinity,                                % Shutdown = brutal_kill | int() >= 0 | infinity
-                  supervisor,                              % Type     = worker | supervisor
-                  []                                       % Modules  = [Module] | dynamic
-              }
+		 {eadc_listener,start_link,[Port,Module]},% StartFun = {M, F, A}
+		 permanent,                               % Restart  = permanent | transient | temporary
+		 2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity
+		 worker,                                  % Type     = worker | supervisor
+		 [eadc_listener]                          % Modules  = [Module] | dynamic
+		},
+	     %% Master module
+	     {   eadc_master,                             % Id       = internal id
+		 {eadc_master, start_link,[]},            % StartFun = {M, F, A}
+		 permanent,                               % Restart  = permanent | transient | temporary
+		 2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity
+		 worker,                                  % Type     = worker | supervisor
+		 [eadc_master]                            % Modules  = [Module] | dynamic
+		},
+	     %% Client instance supervisor
+	     {   eadc_client_sup,
+		 {supervisor,start_link,[{local, eadc_client_sup}, ?MODULE, [Module]]},
+		 permanent,                               % Restart  = permanent | transient | temporary
+		 infinity,                                % Shutdown = brutal_kill | int() >= 0 | infinity
+		 supervisor,                              % Type     = worker | supervisor
+		 []                                       % Modules  = [Module] | dynamic
+		}
             ]
         }
     };
