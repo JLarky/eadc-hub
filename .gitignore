@@ -2,3 +2,5 @@ ebin/erl_crash.dump
 *~
 *crush.dump
 ebin/*.beam
+ebin/*.boot
+ebin/*.script
