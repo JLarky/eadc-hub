@@ -81,8 +81,12 @@ handle_cast(_Msg, State) ->
 %% @private
 %%-------------------------------------------------------------------------
 
+handle_info({Pid, {command, _}}=Message, State) ->
+    client_message(Message),
+    {noreply, State};
+
 handle_info(Info, State) ->
-    io:format("Message ~w\n", [Info]),
+    error_logger:error_msg("Master got message and don't know what to do with it", Info),
     {noreply, State}.
 
 %%-------------------------------------------------------------------------
@@ -110,3 +114,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%------------------------------------------------------------------------
 
+client_message({Pid, {command, Command}}) ->
+    client_command(Pid, Command).
+
+client_command(_Pid, {Header, Command, Args}) ->
+    case Command of 
+	'MSG' ->
+	    {string, String}=eadc_utils:convert({list, Args}),
+	    String_to_send="BMSG "++String,
+	    Childs= supervisor:which_children(eadc_client_sup),
+	    lists:foreach(fun({_, Pid, _, _}=_Elem) ->
+				  Pid ! {master, {send, String_to_send}}
+			  end, Childs)
+    end.

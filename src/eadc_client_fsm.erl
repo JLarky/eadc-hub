@@ -14,7 +14,8 @@
     'WAIT_FOR_SOCKET'/2,
     'WAIT_FOR_DATA'/2,
     'IDENTIFY STAGE'/2,
-    'PROTOCOL STAGE'/2
+    'PROTOCOL STAGE'/2,
+    'NORMAL STAGE'/2
 ]).
 
 -record(state, {
@@ -106,11 +107,7 @@ init([]) ->
 	[ $B,$I,$N,$F,$\ | _] ->
 	    ?DEBUG(debug, "BINF String recived '~s'~n", [Data]),
 	    ok = gen_tcp:send(Socket, Data),
-	    {next_state, 'IDENTIFY STAGE', State};
-	[ $B,$M,$S,$G,$\ | _] ->
-	    ?DEBUG(debug, "BMSG String recived '~s'~n", [Data]),
-	    ok = gen_tcp:send(Socket, Data),
-	    {next_state, 'IDENTIFY STAGE', State};
+	    {next_state, 'NORMAL STAGE', State};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
@@ -121,6 +118,38 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
+
+'NORMAL STAGE'({data, Data}, #state{socket=Socket} = State) ->
+    ?DEBUG(debug, "DATA recived '~s'~n", [Data]),
+    {list, List}=eadc_utils:convert({string, Data}),
+    case List of
+	[[Header|Command_name]|Tail] ->
+	    %%gen_fsm:send_event(self(), {command, {Header, Command_name, Tail}}),
+	    eadc_master ! {self(), {command, {list_to_atom([Header]), list_to_atom(Command_name), Tail}}},
+	    ?DEBUG(debug, "Command recived '~s'~n", [Data]);
+	_ ->
+	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n")
+    end,
+    {next_state, 'NORMAL STAGE', State};
+
+'NORMAL STAGE'({command, Command}, #state{socket=Socket} = State) ->
+    case Command of
+	{$B, "MSG", [Sid, Msg]} ->
+	    ?DEBUG(debug, "BMSG String recived from '~s' with '~s'~n", [Sid, Msg]),
+	    ok = gen_tcp:send(Socket, "BMSG "++Sid++" "++Msg),
+	    {next_state, 'NORMAL STAGE', State};
+	_ ->
+	    ?DEBUG(debug, "Unknown command recived '~w'~n", [Command]),
+	    ok = gen_tcp:send(Socket, "ISTA 240 Unknown"),
+	    {next_state, 'NORMAL STAGE', State}
+    end;
+'NORMAL STAGE'({master, {send, Data}}, #state{socket=Socket} = State) ->
+    ?DEBUG(debug, "Master says to send '~s' ~n", [Data]),
+    ok = gen_tcp:send(Socket, Data),
+    {next_state, 'NORMAL STAGE', State};
+'NORMAL STAGE'(Other,  #state{socket=Socket} = State) ->
+    ?DEBUG(debug, "Unknown message '~s' ~n", [Other]),
+    {next_state, 'NORMAL STAGE', State}.
 
 
 %% Notification event coming from client
@@ -177,6 +206,9 @@ handle_info({tcp_closed, Socket}, _StateName,
             #state{socket=Socket, addr=Addr} = StateData) ->
     error_logger:info_msg("~p Client ~p disconnected.\n", [self(), Addr]),
     {stop, normal, StateData};
+
+handle_info({master, Data}, StateName, StateData) ->
+    ?MODULE:StateName({master, Data}, StateData);
 
 handle_info(_Info, StateName, StateData) ->
     {noreply, StateName, StateData}.
