@@ -1,39 +1,31 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([parse/2, reverse/1]).
+-export([convert/1]).
 -export([random_base32/1, base32/1]).
 
-parse(string, String) ->
-    parse(string, _Out=[], _Buf=[], String);
-parse(simple, String) ->
-    parse(simple, [], [], String).
+convert({string, String}) ->
+    convert_string (_Out=[], _Buf=[], String);
+convert({list, List}) when is_list(List)->
+    convert_list(_Out=[], List).
 
-parse(string, Out, [], []) ->
-    Out;
-parse(string, Out, Buf, [] ) ->
-    parse(string, Out++[Buf], [], []);
-parse(string, [], Buf, [32|Tail] ) ->
-    parse(string, [Buf], [], Tail);
-parse(string, Out, Buf, [32|Tail] ) ->
-    parse(string, Out++[Buf], [], Tail);
-parse(string, Out, Buf, [H|Tail] ) ->
-    parse(string, Out, Buf++[H], Tail);
+convert_string(Out, [], []) ->
+    {list, Out};
+convert_string(Out, Buf, [] ) ->
+    convert_string(Out++[Buf], [], []);
+convert_string([], Buf, [32|Tail] ) ->
+    convert_string([Buf], [], Tail);
+convert_string(Out, Buf, [32|Tail] ) ->
+    convert_string(Out++[Buf], [], Tail);
+convert_string(Out, Buf, [H|Tail] ) ->
+    convert_string(Out, Buf++[H], Tail).
 
-
-parse(simple, Out, Buf, []) ->
-    {simple, reverse([reverse(Buf)|Out])};
-parse(simple, Out, Buf, [ Elem | Tail ]) ->
-    case {Out,Elem} of
-	{[],32} -> parse(simple, [reverse(Buf)], [], Tail);
-	{ _,32} -> parse(simple, [reverse(Buf)|Out], [], Tail);
-	_       -> parse(simple, Out, [Elem|Buf], Tail)
-    end.
-
-reverse(List)             -> reverse([], List).
-reverse(Out, [])          -> Out;
-reverse(Out, [Elem|Tail]) -> reverse([Elem|Out], Tail).
-
+convert_list(Out, []) ->
+    {string, Out};
+convert_list( [], [H|T]) when is_list(H)->
+    convert_list(H, T);
+convert_list(Out, [H|T]) when is_list(H)->
+    convert_list(Out++" "++H, T).
 
 random_base32(Count) ->
     random_base32(Count, []).
