@@ -88,7 +88,7 @@ init([]) ->
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
 	    ok = gen_tcp:send(Socket, "ISUP ADBASE ADTIGR\n"),
-	    ok = gen_tcp:send(Socket, "ISID FJJRJFJDJDJEJEJDJDJE\n"),
+	    ok = gen_tcp:send(Socket, "ISID "++ eadc_utils:random_base32(32) ++"\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -106,11 +106,11 @@ init([]) ->
 	[ $B,$I,$N,$F,$\ | _] ->
 	    ?DEBUG(debug, "BINF String recived '~s'~n", [Data]),
 	    ok = gen_tcp:send(Socket, Data),
-	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
+	    {next_state, 'IDENTIFY STAGE', State};
 	[ $B,$M,$S,$G,$\ | _] ->
 	    ?DEBUG(debug, "BMSG String recived '~s'~n", [Data]),
 	    ok = gen_tcp:send(Socket, Data),
-	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
+	    {next_state, 'IDENTIFY STAGE', State};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}

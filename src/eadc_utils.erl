@@ -4,8 +4,21 @@
 -export([parse/2, reverse/1]).
 -export([random_base32/1, base32/1]).
 
+parse(string, String) ->
+    parse(string, _Out=[], _Buf=[], String);
 parse(simple, String) ->
     parse(simple, [], [], String).
+
+parse(string, Out, [], []) ->
+    Out;
+parse(string, Out, Buf, [] ) ->
+    parse(string, Out++[Buf], [], []);
+parse(string, [], Buf, [32|Tail] ) ->
+    parse(string, [Buf], [], Tail);
+parse(string, Out, Buf, [32|Tail] ) ->
+    parse(string, Out++[Buf], [], Tail);
+parse(string, Out, Buf, [H|Tail] ) ->
+    parse(string, Out, Buf++[H], Tail);
 
 
 parse(simple, Out, Buf, []) ->
