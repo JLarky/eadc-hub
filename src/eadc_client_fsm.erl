@@ -88,6 +88,8 @@ init([]) ->
     ?DEBUG(debug, "Data recived ~w~n", [Data]),
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
+	    {A,B,C}=time(),
+	    random:seed(A,B,C),
 	    ok = gen_tcp:send(Socket, "ISUP ADBASE ADTIGR\n"),
 	    ok = gen_tcp:send(Socket, "ISID "++ eadc_utils:random_base32(32) ++"\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
@@ -103,10 +105,13 @@ init([]) ->
 
 'IDENTIFY STAGE'({data, Data}, #state{socket=Socket} = State) ->
     ?DEBUG(debug, "String recived '~s'~n", [Data]),
-    case Data of
-	[ $B,$I,$N,$F,$\ | _] ->
+    {list, List}=eadc_utils:convert({string, Data}),
+    case List of
+	[[$B|"INF"]|Tail] ->
 	    ?DEBUG(debug, "BINF String recived '~s'~n", [Data]),
-	    ok = gen_tcp:send(Socket, Data),
+	    %% ok = gen_tcp:send(Socket, Data),
+	    %% чтобы успел поменять состояние
+	    erlang:send_after(10, eadc_master, {self(), {command, {$B, 'INF', Tail}}}), 
 	    {next_state, 'NORMAL STAGE', State};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -132,21 +137,13 @@ init([]) ->
     end,
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'({command, Command}, #state{socket=Socket} = State) ->
-    case Command of
-	{$B, "MSG", [Sid, Msg]} ->
-	    ?DEBUG(debug, "BMSG String recived from '~s' with '~s'~n", [Sid, Msg]),
-	    ok = gen_tcp:send(Socket, "BMSG "++Sid++" "++Msg),
-	    {next_state, 'NORMAL STAGE', State};
-	_ ->
-	    ?DEBUG(debug, "Unknown command recived '~w'~n", [Command]),
-	    ok = gen_tcp:send(Socket, "ISTA 240 Unknown"),
-	    {next_state, 'NORMAL STAGE', State}
-    end;
 'NORMAL STAGE'({master, {send, Data}}, #state{socket=Socket} = State) ->
     ?DEBUG(debug, "Master says to send '~s' ~n", [Data]),
     ok = gen_tcp:send(Socket, Data),
     {next_state, 'NORMAL STAGE', State};
+'NORMAL STAGE'({master, {event, Event}}, State) ->
+    master_event(Event, 'NORMAL STAGE', State);
+
 'NORMAL STAGE'(Other,  #state{socket=Socket} = State) ->
     ?DEBUG(debug, "Unknown message '~s' ~n", [Other]),
     {next_state, 'NORMAL STAGE', State}.
@@ -233,3 +230,13 @@ terminate(_Reason, _StateName, #state{socket=Socket}) ->
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
+
+%%%------------------------------------------------------------------------
+%%% Internal functions
+%%%------------------------------------------------------------------------
+master_event(Event, StateName, #state{socket= _Socket} = State) ->
+    %%case Event of
+	%%{new_user, Pid} ->
+	  %%  Pid ! {master, {send, ""
+    ?DEBUG(debug, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ~w~n", [{Event}]),
+    {next_state, StateName, State}.
