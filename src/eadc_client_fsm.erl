@@ -21,12 +21,14 @@
 -record(state, {
 	  socket,    % client socket
 	  addr,      % client address
-	  sid       % client's SID
+	  sid,       % client's SID
+	  binf
 	 }).
 
 -define(TIMEOUT, 120000).
 -define(DEBUG(Type, Format, Data), case Type of
 				       debug ->
+					   io:format("\npid ~w:", [self()]),
 					   error_logger:info_msg(Format, Data)
 				   end).
 
@@ -109,14 +111,26 @@ init([]) ->
     case List of
 	[[$B|"INF"]|Tail] ->
 	    ?DEBUG(debug, "BINF String recived '~s'~n", [Data]),
+	    New_State=State#state{binf=Data},
+	    Childs= supervisor:which_children(eadc_client_sup),
+	    lists:foreach(fun({_, Pid, _, _}=_Elem) ->
+				  gen_fsm:send_event(Pid, {binf, Data}),
+				  if 
+				      self() == Pid ->
+					  dont_send;
+				      true ->
+					  gen_fsm:send_event(Pid, {new_client, self()})
+				  end
+			  end, Childs),
 	    %% ok = gen_tcp:send(Socket, Data),
-	    %% чтобы успел поменять состояние
-	    erlang:send_after(10, eadc_master, {self(), {command, {$B, 'INF', Tail}}}), 
-	    {next_state, 'NORMAL STAGE', State};
+	    {next_state, 'IDENTIFY STAGE', New_State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
     end;
+
+'IDENTIFY STAGE'({binf, Data},  State) ->
+    'NORMAL STAGE'({binf, Data}, State);
 
 'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
     ok = gen_tcp:send(Socket, "Protocol Error: connection timed out"),
@@ -130,19 +144,30 @@ init([]) ->
     case List of
 	[[Header|Command_name]|Tail] ->
 	    %%gen_fsm:send_event(self(), {command, {Header, Command_name, Tail}}),
-	    eadc_master ! {self(), {command, {list_to_atom([Header]), list_to_atom(Command_name), Tail}}},
+	    %%eadc_master ! {self(), {command, {list_to_atom([Header]), list_to_atom(Command_name), Tail}}},
+	    client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail),
 	    ?DEBUG(debug, "Command recived '~s'~n", [Data]);
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n")
     end,
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'({master, {send, Data}}, #state{socket=Socket} = State) ->
-    ?DEBUG(debug, "Master says to send '~s' ~n", [Data]),
+'NORMAL STAGE'({binf, Data}, #state{socket=Socket} = State) ->
+    ?DEBUG(debug, "BINF event '~s'~n", [Data]),
     ok = gen_tcp:send(Socket, Data),
     {next_state, 'NORMAL STAGE', State};
+'NORMAL STAGE'({new_client, Pid}, #state{socket=Socket, binf=BINF} = State) ->
+    ?DEBUG(debug, "new_client event from ~w \n", [Pid,BINF]),
+    gen_fsm:send_event(Pid, {binf, BINF}),
+    {next_state, 'NORMAL STAGE', State};
+
 'NORMAL STAGE'({master, {event, Event}}, State) ->
     master_event(Event, 'NORMAL STAGE', State);
+
+'NORMAL STAGE'({send_to_socket, Data}, #state{socket=Socket} = State) ->
+    ?DEBUG(debug, "send_to_socket event '~s'~n", [Data]),
+    ok = gen_tcp:send(Socket, Data),
+    {next_state, 'NORMAL STAGE', State};
 
 'NORMAL STAGE'(Other,  #state{socket=Socket} = State) ->
     ?DEBUG(debug, "Unknown message '~s' ~n", [Other]),
@@ -157,7 +182,7 @@ init([]) ->
 
 'WAIT_FOR_DATA'(timeout, State) ->
     error_logger:error_msg("~p Client connection timeout - closing.\n", [self()]),
-     {stop, normal, State};
+    {stop, normal, State};
 
 'WAIT_FOR_DATA'(Data, State) ->
     io:format("~p Ignoring data: ~p\n", [self(), Data]),
@@ -240,3 +265,15 @@ master_event(Event, StateName, #state{socket= _Socket} = State) ->
 	  %%  Pid ! {master, {send, ""
     ?DEBUG(debug, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ~w~n", [{Event}]),
     {next_state, StateName, State}.
+
+
+client_command(Header, Command, Args) ->
+    case Command of 
+	'MSG' ->
+	    {string, String}=eadc_utils:convert({list, Args}),
+	    String_to_send="BMSG "++String,
+	    Childs= supervisor:which_children(eadc_client_sup),
+	    lists:foreach(fun({_, Pid, _, _}=_Elem) ->
+				  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
+			  end, Childs)
+    end.
