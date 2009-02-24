@@ -25,12 +25,10 @@
 	  binf
 	 }).
 
+-export([test/0]).
+
 -define(TIMEOUT, 120000).
--define(DEBUG(Type, Format, Data), case Type of
-				       debug ->
-					   io:format("\npid ~w:", [self()]),
-					   error_logger:info_msg(Format, Data)
-				   end).
+-include("eadc.hrl").
 
 %%%------------------------------------------------------------------------
 %%% API
@@ -77,7 +75,7 @@ init([]) ->
 'WAIT_FOR_SOCKET'({socket_ready, Socket}, State) when is_port(Socket) ->
     % Now we own the socket
     error_logger:info_msg("new socket ~w\n", [{Socket, ok}]),
-%%    inet:setopts(Socket, [{active, once}, {packet, 2}, binary]),
+
     inet:setopts(Socket, [{active, once}, {packet, line}]),
     {ok, {IP, _Port}} = inet:peername(Socket),
     {next_state, 'PROTOCOL STAGE', State#state{socket=Socket, addr=IP}, ?TIMEOUT};
@@ -90,10 +88,10 @@ init([]) ->
     ?DEBUG(debug, "Data recived ~w~n", [Data]),
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
-	    {A,B,C}=time(),
-	    random:seed(A,B,C),
+	    {A,B,C}=time(), random:seed(A,B,C),
 	    ok = gen_tcp:send(Socket, "ISUP ADBASE ADTIGR\n"),
-	    ok = gen_tcp:send(Socket, "ISID "++ eadc_utils:random_base32(32) ++"\n"),
+	    Sid = get_unical_SID(),
+	    ok = gen_tcp:send(Socket, "ISID "++Sid ++ eadc_utils:random_base32(28) ++"\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -105,24 +103,25 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
-'IDENTIFY STAGE'({data, Data}, #state{socket=Socket} = State) ->
+'IDENTIFY STAGE'({data, Data}, #state{socket=Socket}=State) ->
     ?DEBUG(debug, "String recived '~s'~n", [Data]),
-    {list, List}=eadc_utils:convert({string, Data}),
-    case List of
-	[[$B|"INF"]|Tail] ->
+    case Data of
+	[$B, $I, $N, $F, $\ |_Tail] ->
 	    ?DEBUG(debug, "BINF String recived '~s'~n", [Data]),
-	    New_State=State#state{binf=Data},
+	    My_Pid=self(),
+	    {list, List} = eadc_utils:convert({string, Data}),
+	    [_BINF, SID | _] = List,
+	    Sid = list_to_atom(SID),
+	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
+	    New_State=State#state{binf=Data, sid=Sid},
 	    Childs= supervisor:which_children(eadc_client_sup),
 	    lists:foreach(fun({_, Pid, _, _}=_Elem) ->
 				  gen_fsm:send_event(Pid, {binf, Data}),
 				  if 
-				      self() == Pid ->
-					  dont_send;
-				      true ->
-					  gen_fsm:send_event(Pid, {new_client, self()})
+				      My_Pid == Pid -> dont_send;
+				      true -> gen_fsm:send_event(Pid, {new_client, My_Pid})
 				  end
 			  end, Childs),
-	    %% ok = gen_tcp:send(Socket, Data),
 	    {next_state, 'IDENTIFY STAGE', New_State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -143,8 +142,6 @@ init([]) ->
     {list, List}=eadc_utils:convert({string, Data}),
     case List of
 	[[Header|Command_name]|Tail] ->
-	    %%gen_fsm:send_event(self(), {command, {Header, Command_name, Tail}}),
-	    %%eadc_master ! {self(), {command, {list_to_atom([Header]), list_to_atom(Command_name), Tail}}},
 	    client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail),
 	    ?DEBUG(debug, "Command recived '~s'~n", [Data]);
 	_ ->
@@ -156,8 +153,8 @@ init([]) ->
     ?DEBUG(debug, "BINF event '~s'~n", [Data]),
     ok = gen_tcp:send(Socket, Data),
     {next_state, 'NORMAL STAGE', State};
-'NORMAL STAGE'({new_client, Pid}, #state{socket=Socket, binf=BINF} = State) ->
-    ?DEBUG(debug, "new_client event from ~w \n", [Pid,BINF]),
+'NORMAL STAGE'({new_client, Pid}, #state{binf=BINF} = State) ->
+    ?DEBUG(debug, "new_client event from ~w \n", [Pid]),
     gen_fsm:send_event(Pid, {binf, BINF}),
     {next_state, 'NORMAL STAGE', State};
 
@@ -169,7 +166,7 @@ init([]) ->
     ok = gen_tcp:send(Socket, Data),
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'(Other,  #state{socket=Socket} = State) ->
+'NORMAL STAGE'(Other, State) ->
     ?DEBUG(debug, "Unknown message '~s' ~n", [Other]),
     {next_state, 'NORMAL STAGE', State}.
 
@@ -242,7 +239,14 @@ handle_info(_Info, StateName, StateData) ->
 %% Returns: any
 %% @private
 %%-------------------------------------------------------------------------
-terminate(_Reason, _StateName, #state{socket=Socket}) ->
+terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}) ->
+    ?DEBUG(debug, "TERMINATE ~w", [Sid]),
+    (catch ets:delete(eadc_clients, Sid)),
+    String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
+    lists:foreach(fun(Pid) ->
+			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
+		  end, all_pids()),
+    (catch gen_tcp:send(Socket, String_to_send)),
     (catch gen_tcp:close(Socket)),
     ok.
 
@@ -260,16 +264,19 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%% Internal functions
 %%%------------------------------------------------------------------------
 master_event(Event, StateName, #state{socket= _Socket} = State) ->
-    %%case Event of
-	%%{new_user, Pid} ->
-	  %%  Pid ! {master, {send, ""
-    ?DEBUG(debug, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ~w~n", [{Event}]),
+    ?DEBUG(debug, "Unknown event in fsm !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ~w~n", [{Event}]),
     {next_state, StateName, State}.
 
 
 client_command(Header, Command, Args) ->
-    case Command of 
-	'MSG' ->
+    case {Header,Command} of 
+	{'E','MSG'} ->
+	    {string, String}=eadc_utils:convert({list, Args}),
+	    String_to_send="EMSG "++String,
+	    [Sid1, Sid2 | _] = Args,
+	    gen_fsm:send_event(get_pid_by_sid(Sid1), {send_to_socket, String_to_send}),
+	    gen_fsm:send_event(get_pid_by_sid(Sid2), {send_to_socket, String_to_send});
+	{'B','MSG'} ->
 	    {string, String}=eadc_utils:convert({list, Args}),
 	    String_to_send="BMSG "++String,
 	    Childs= supervisor:which_children(eadc_client_sup),
@@ -277,3 +284,43 @@ client_command(Header, Command, Args) ->
 				  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
 			  end, Childs)
     end.
+
+
+
+%%%------------------------------------------------------------------------                                                                                            
+%%% Helping functions                                                                                            
+%%%------------------------------------------------------------------------
+
+get_unical_SID() ->
+    Sid = eadc_utils:random_base32(4),
+    case ets:member(eadc_clients, list_to_atom(Sid)) of
+	true -> get_unical_SID();
+	_ ->  Sid
+    end.
+
+get_pid_by_sid(Sid) when is_atom(Sid) ->
+    case ets:lookup(eadc_clients, Sid) of
+	[] ->
+	    error;
+	[Client] ->
+	    Client#client.pid
+    end;
+get_pid_by_sid(Sid) when is_list(Sid)->
+    get_pid_by_sid(list_to_atom(Sid)).
+
+
+get_sid_by_pid(Pid) when is_pid(Pid) ->
+    MS=[{{client, '$1','$2'},[{'==','$2',Pid}],['$1']}],
+    case ets:select(eadc_clients, MS) of
+	[] -> error;
+	[Sid] -> Sid
+    end.
+
+all_pids() ->
+    List=ets:match(eadc_clients, #client{_='_', pid='$1'}),
+    lists:map(fun([Pid]) -> Pid end, List).
+
+
+test() ->
+    all_pids().
+

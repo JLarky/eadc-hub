@@ -11,10 +11,11 @@
          code_change/3]).
 
 -record(state, {
-                listener,       % Listening socket
-                acceptor,       % Asynchronous acceptor's internal reference
-                module          % FSM handling module
-               }).
+	  listener,       % Listening socket
+	  acceptor,       % Asynchronous acceptor's internal reference
+	  module          % FSM handling module
+	 }).
+-include("eadc.hrl").
 
 %%--------------------------------------------------------------------
 %% @spec (Port::integer(), Module) -> {ok, Pid} | {error, Reason}
@@ -81,7 +82,7 @@ handle_cast(_Msg, State) ->
 %% @private
 %%-------------------------------------------------------------------------
 
-handle_info({Pid, {command, _}}=Message, State) ->
+handle_info({_Pid, {command, _}}=Message, State) ->
     case (catch client_message(Message)) of
 	{'EXIT', Error} ->
 	    error_logger:error_msg("Error in master\n", [Error]);
@@ -121,4 +122,4 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 client_message(Message) ->
-    error_logger:error_msg("Master: message ~W \n", [Message]).
+    ?DEBUG(error, "Master: message ~W \n", [Message]).

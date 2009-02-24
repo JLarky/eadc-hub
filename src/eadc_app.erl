@@ -23,6 +23,7 @@ start_client() ->
 %% Application behaviour callbacks
 %%----------------------------------------------------------------------
 start(_Type, _Args) ->
+    ets:new(eadc_clients, [set, named_table, public,{keypos,2}]),
     ListenPort = get_app_env(listen_port, ?DEF_PORT),
     supervisor:start_link({local, ?MODULE}, ?MODULE, {eadc_sup, ListenPort, eadc_client_fsm}).
 
@@ -35,7 +36,7 @@ stop(_S) ->
 init({eadc_sup, Port, Module}) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
-            [
+	 [
 	     %% TCP Listener
 	     {   eadc_sup,                                 % Id       = internal id
 		 {eadc_listener,start_link,[Port,Module]},% StartFun = {M, F, A}
