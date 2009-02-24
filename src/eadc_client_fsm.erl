@@ -279,7 +279,14 @@ client_command(Header, Command, Args) ->
 	       {'D', 'RCM'} ->
 		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
 	       {'D', 'CTM'} ->
-		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)]
+		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
+	       {'B', 'INF'} ->
+		   %% TODO %% тут надо обновлять переменную state
+		   all_pids();
+	       {'B', 'SCH'} ->
+		   all_pids();
+	       ok ->
+		   ok
 	   end,
     lists:foreach(fun(Pid) ->
 			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
