@@ -269,27 +269,31 @@ master_event(Event, StateName, #state{socket= _Socket} = State) ->
 
 
 client_command(Header, Command, Args) ->
-    case {Header,Command} of 
-	{'E','MSG'} ->
-	    {string, String}=eadc_utils:convert({list, Args}),
-	    String_to_send="EMSG "++String,
-	    [Sid1, Sid2 | _] = Args,
-	    gen_fsm:send_event(get_pid_by_sid(Sid1), {send_to_socket, String_to_send}),
-	    gen_fsm:send_event(get_pid_by_sid(Sid2), {send_to_socket, String_to_send});
-	{'B','MSG'} ->
-	    {string, String}=eadc_utils:convert({list, Args}),
-	    String_to_send="BMSG "++String,
-	    Childs= supervisor:which_children(eadc_client_sup),
-	    lists:foreach(fun({_, Pid, _, _}=_Elem) ->
-				  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
-			  end, Childs)
-    end.
+    {string, String}=eadc_utils:convert({list, Args}),
+    String_to_send=command(Header, Command)++" "++String,
+    Pids = case {Header,Command} of 
+	       {'B','MSG'} ->
+		   all_pids();
+	       {'E', 'MSG'} ->
+		   [Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid1), get_pid_by_sid(Sid2)];
+	       {'D', 'RCM'} ->
+		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
+	       {'D', 'CTM'} ->
+		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)]
+	   end,
+    lists:foreach(fun(Pid) ->
+			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
+		  end, Pids).
+
 
 
 
 %%%------------------------------------------------------------------------                                                                                            
 %%% Helping functions                                                                                            
 %%%------------------------------------------------------------------------
+
+command(Type, Command) ->
+    atom_to_list(Type)++atom_to_list(Command).
 
 get_unical_SID() ->
     Sid = eadc_utils:random_base32(4),
