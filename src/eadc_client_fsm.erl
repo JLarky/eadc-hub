@@ -11,22 +11,23 @@
 
 %% FSM States
 -export([
-    'WAIT_FOR_SOCKET'/2,
-    'WAIT_FOR_DATA'/2,
-    'IDENTIFY STAGE'/2,
-    'PROTOCOL STAGE'/2,
-    'NORMAL STAGE'/2
-]).
+	 'WAIT_FOR_SOCKET'/2,
+	 'WAIT_FOR_DATA'/2,
+	 'IDENTIFY STAGE'/2,
+	 'PROTOCOL STAGE'/2,
+	 'NORMAL STAGE'/2
+	]).
 
 -record(state, {
 	  socket,    % client socket
 	  addr,      % client address
 	  sid,       % client's SID
 	  binf,      % bif string to send to other clients
-	  buf        % buffer for client commands
+	  buf        % buffer for client messages sended in several tcp pockets
 	 }).
 
--export([test/0]).
+%% DEBUG
+-export([test/1]).
 
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").
@@ -74,7 +75,7 @@ init([]) ->
 %% @private
 %%-------------------------------------------------------------------------
 'WAIT_FOR_SOCKET'({socket_ready, Socket}, State) when is_port(Socket) ->
-    % Now we own the socket
+    %% Now we own the socket
     error_logger:info_msg("new socket ~w\n", [{Socket, ok}]),
 
     inet:setopts(Socket, [{active, once}, {packet, line}]),
@@ -239,7 +240,7 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 %% @private
 %%-------------------------------------------------------------------------
 handle_info({tcp, Socket, Bin}, StateName, #state{socket=Socket, buf=Buf} = StateData) ->
-    % Flow control: enable forwarding of next TCP message
+    %% Flow control: enable forwarding of next TCP message
     inet:setopts(Socket, [{active, once}]),
     Data = binary_to_list(Bin),
     case {Buf, lists:last(Data)} of 
@@ -365,7 +366,7 @@ all_pids() ->
     lists:map(fun([Pid]) -> Pid end, List).
 
 
-test() ->
+test(String) ->
     [Pid | _] =all_pids(),
-    gen_fsm:send_event(Pid, {inf_update, ["SS419000", "SF17771"]}).
+    gen_fsm:send_event(Pid, {send_to_socket, String}).
 
