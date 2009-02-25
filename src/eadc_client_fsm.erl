@@ -107,31 +107,28 @@ init([]) ->
 
 'IDENTIFY STAGE'({data, Data}, #state{socket=Socket}=State) ->
     ?DEBUG(debug, "String recived '~s'~n", [Data]),
-    case Data of
-	[$B, $I, $N, $F, $\ |_Tail] ->
-	    ?DEBUG(debug, "BINF String recived '~s'~n", [Data]),
-	    My_Pid=self(),
-	    {list, List} = eadc_utils:convert({string, Data}),
-	    [_BINF, SID | _] = List,
-	    Sid = list_to_atom(SID),
-	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
+    {list, List} = eadc_utils:convert({string, Data}),
+    case List of
+	["BINF", SID | _] ->
+	    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
+	    My_Pid=self(), Sid = list_to_atom(SID),
 	    New_State=State#state{binf=Data, sid=Sid},
-	    Childs= supervisor:which_children(eadc_client_sup),
-	    lists:foreach(fun({_, Pid, _, _}=_Elem) ->
-				  gen_fsm:send_event(Pid, {binf, Data}),
-				  if 
-				      My_Pid == Pid -> dont_send;
-				      true -> gen_fsm:send_event(Pid, {new_client, My_Pid})
-				  end
-			  end, Childs),
+	    Other_clients = all_pids(), %% важно, что перед операцией записи
+	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
+	    lists:foreach(fun(Pid) ->
+				  gen_fsm:send_event(Pid, {new_client, My_Pid})
+			  end, Other_clients),
+	    lists:foreach(fun(Pid) ->
+				  gen_fsm:send_event(Pid, {send_to_socket, Data})
+			  end, [self()|Other_clients]),
 	    {next_state, 'IDENTIFY STAGE', New_State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
     end;
 
-'IDENTIFY STAGE'({binf, Data},  State) ->
-    'NORMAL STAGE'({binf, Data}, State);
+'IDENTIFY STAGE'({send_to_socket, Data},  State) ->
+    'NORMAL STAGE'({send_to_socket, Data}, State);
 
 'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
     ok = gen_tcp:send(Socket, "Protocol Error: connection timed out"),
@@ -149,11 +146,6 @@ init([]) ->
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n")
     end,
-    {next_state, 'NORMAL STAGE', State};
-
-'NORMAL STAGE'({binf, Data}, #state{socket=Socket} = State) ->
-    ?DEBUG(debug, "BINF event '~s'~n", [Data]),
-    ok = gen_tcp:send(Socket, Data),
     {next_state, 'NORMAL STAGE', State};
 
 'NORMAL STAGE'({inf_update, Inf_update}, #state{binf=Inf, sid=Sid} = State) ->
@@ -179,11 +171,8 @@ init([]) ->
 
 'NORMAL STAGE'({new_client, Pid}, #state{binf=BINF} = State) ->
     ?DEBUG(debug, "new_client event from ~w \n", [Pid]),
-    gen_fsm:send_event(Pid, {binf, BINF}),
+    gen_fsm:send_event(Pid, {send_to_socket, BINF}),
     {next_state, 'NORMAL STAGE', State};
-
-'NORMAL STAGE'({master, {event, Event}}, State) ->
-    master_event(Event, 'NORMAL STAGE', State);
 
 'NORMAL STAGE'({send_to_socket, Data}, #state{socket=Socket} = State) ->
     ?DEBUG(debug, "send_to_socket event '~s'~n", [Data]),
@@ -295,10 +284,6 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%%------------------------------------------------------------------------
 %%% Internal functions
 %%%------------------------------------------------------------------------
-master_event(Event, StateName, #state{socket= _Socket} = State) ->
-    ?DEBUG(debug, "Unknown event in fsm !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ~w~n", [{Event}]),
-    {next_state, StateName, State}.
-
 
 client_command(Header, Command, Args) ->
     {string, String}=eadc_utils:convert({list, Args}),
