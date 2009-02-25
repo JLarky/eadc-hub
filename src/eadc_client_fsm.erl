@@ -285,6 +285,10 @@ client_command(Header, Command, Args) ->
 		   all_pids();
 	       {'B', 'SCH'} ->
 		   all_pids();
+	       {'F', 'SCH'} ->
+		   all_pids(); %% надо бы искать по признаку поддержки фичи
+	       {'D', 'RES'} ->
+		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
 	       ok ->
 		   ok
 	   end,
