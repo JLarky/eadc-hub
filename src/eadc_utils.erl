@@ -4,21 +4,20 @@
 -export([convert/1]).
 -export([random_base32/1, base32/1]).
 
+
 convert({string, String}) ->
-    convert_string (_Out=[], _Buf=[], String);
-convert({list, List}) when is_list(List)->
+    convert_string (String);
+convert({list, List}) when is_list(List) ->
     convert_list(_Out=[], List).
 
-convert_string(Out, [], []) ->
-    {list, Out};
-convert_string(Out, Buf, [] ) ->
-    convert_string(Out++[Buf], [], []);
-convert_string([], Buf, [32|Tail] ) ->
-    convert_string([Buf], [], Tail);
-convert_string(Out, Buf, [32|Tail] ) ->
-    convert_string(Out++[Buf], [], Tail);
-convert_string(Out, Buf, [H|Tail] ) ->
-    convert_string(Out, Buf++[H], Tail).
+convert_string(String) ->
+    {Bu, Ac} = lists:foldr(fun(Char, {Buf, Acc}) ->
+			 case Char of
+			     $\  -> {[], [Buf|Acc]};
+			     _ -> {[Char | Buf], Acc}
+			 end
+		 end, {[],[]}, String), [Bu|Ac].
+
 
 convert_list(Out, []) ->
     {string, Out};

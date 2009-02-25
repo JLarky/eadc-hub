@@ -292,7 +292,7 @@ master_event(Event, StateName, #state{socket= _Socket} = State) ->
 
 client_command(Header, Command, Args) ->
     {string, String}=eadc_utils:convert({list, Args}),
-    String_to_send=command(Header, Command)++" "++String,
+    String_to_send=lists:concat([Header, Command, " ", String]),
     Pids = case {Header,Command} of 
 	       {'B','MSG'} ->
 		   all_pids();
@@ -326,14 +326,11 @@ client_command(Header, Command, Args) ->
 %%% Helping functions                                                                                            
 %%%------------------------------------------------------------------------
 
-command(Type, Command) ->
-    atom_to_list(Type)++atom_to_list(Command).
-
 get_unical_SID() ->
     Sid = eadc_utils:random_base32(4),
     case ets:member(eadc_clients, list_to_atom(Sid)) of
 	true -> get_unical_SID();
-	_ ->  Sid
+	_    -> Sid
     end.
 
 get_pid_by_sid(Sid) when is_atom(Sid) ->
