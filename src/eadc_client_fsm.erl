@@ -121,14 +121,11 @@ init([]) ->
 	    lists:foreach(fun(Pid) ->
 				  gen_fsm:send_event(Pid, {send_to_socket, Data})
 			  end, [self()|Other_clients]),
-	    {next_state, 'IDENTIFY STAGE', New_State, ?TIMEOUT};
+	    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
     end;
-
-'IDENTIFY STAGE'({send_to_socket, Data},  State) ->
-    'NORMAL STAGE'({send_to_socket, Data}, State);
 
 'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
     ok = gen_tcp:send(Socket, "Protocol Error: connection timed out"),
