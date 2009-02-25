@@ -153,6 +153,28 @@ init([]) ->
     ?DEBUG(debug, "BINF event '~s'~n", [Data]),
     ok = gen_tcp:send(Socket, Data),
     {next_state, 'NORMAL STAGE', State};
+
+'NORMAL STAGE'({inf_update, Inf_update}, #state{binf=Inf, sid=Sid} = State) ->
+    ?DEBUG(debug, "BINF Update '~w'~n", [Inf_update]),
+    ?DEBUG(debug, "Old BINF '~s'~n", [Inf]),
+    {list, [_binf, _sid | Inf_list]} = eadc_utils:convert({string, Inf}),
+    New_Inf_list=
+	lists:foldl(
+	  fun(Cur_Inf_Elem, Inf_Acc) ->
+		  Updated_Inf_Elem = 
+		      lists:foldl(
+			fun(Cur_Upd_Elem, Inf_Elem_Acc) -> 
+				case lists:prefix(lists:sublist(Cur_Upd_Elem, 2), Inf_Elem_Acc) of
+				    true -> Cur_Upd_Elem;
+				    false -> Inf_Elem_Acc
+				end
+			end, Cur_Inf_Elem, Inf_update),
+		  [Updated_Inf_Elem|Inf_Acc]
+	  end, [], lists:reverse(Inf_list)),
+    {string, New_Inf} = eadc_utils:convert({list, ["BINF", atom_to_list(Sid) | New_Inf_list]}),
+    ?DEBUG(debug, "New BINF '~s'~n", [New_Inf]),
+    {next_state, 'NORMAL STAGE', State#state{binf=New_Inf}};
+
 'NORMAL STAGE'({new_client, Pid}, #state{binf=BINF} = State) ->
     ?DEBUG(debug, "new_client event from ~w \n", [Pid]),
     gen_fsm:send_event(Pid, {binf, BINF}),
@@ -281,7 +303,8 @@ client_command(Header, Command, Args) ->
 	       {'D', 'CTM'} ->
 		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
 	       {'B', 'INF'} ->
-		   %% TODO %% тут надо обновлять переменную state
+		   [_sid | Filds] = Args,
+		   gen_fsm:send_event(self(), {inf_update, Filds}),
 		   all_pids();
 	       {'B', 'SCH'} ->
 		   all_pids();
@@ -289,7 +312,7 @@ client_command(Header, Command, Args) ->
 		   all_pids(); %% надо бы искать по признаку поддержки фичи
 	       {'D', 'RES'} ->
 		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
-	       ok ->
+	       {place, holder} ->
 		   ok
 	   end,
     lists:foreach(fun(Pid) ->
@@ -337,5 +360,6 @@ all_pids() ->
 
 
 test() ->
-    all_pids().
+    [Pid | _] =all_pids(),
+    gen_fsm:send_event(Pid, {inf_update, ["SS419000", "SF17771"]}).
 
