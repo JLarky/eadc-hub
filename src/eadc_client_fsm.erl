@@ -27,7 +27,7 @@
 	 }).
 
 %% DEBUG
--export([test/1]).
+-export([test/1, get_sid_by_pid/1]).
 
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").
@@ -115,6 +115,7 @@ init([]) ->
 	    New_State=State#state{binf=Data, sid=Sid},
 	    Other_clients = all_pids(), %% важно, что перед операцией записи
 	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
+	    eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid}]),
 	    lists:foreach(fun(Pid) ->
 				  gen_fsm:send_event(Pid, {new_client, My_Pid})
 			  end, Other_clients),

@@ -1,7 +1,7 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([convert/1]).
+-export([convert/1, quote/1]).
 -export([random_base32/1, base32/1]).
 
 -export([code_reload/1]).
@@ -24,9 +24,19 @@ convert_string(String) ->
 convert_list(Out, []) ->
     {string, Out};
 convert_list( [], [H|T]) when is_list(H)->
-    convert_list(H, T);
+    convert_list(quote(H), T);
 convert_list(Out, [H|T]) when is_list(H)->
-    convert_list(Out++" "++H, T).
+    convert_list(Out++" "++quote(H), T).
+
+quote(String) ->
+    lists:foldl(fun(Char, Acc) -> case Char of
+				      $\ ->
+					  Acc++"\\s";
+				      $\\ ->
+					  Acc++"\\\\";
+				      _ ->
+					  Acc++[Char]
+				  end end, [], String).
 
 random_base32(Count) ->
     random_base32(Count, []).
