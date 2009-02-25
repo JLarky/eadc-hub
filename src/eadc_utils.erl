@@ -4,6 +4,8 @@
 -export([convert/1]).
 -export([random_base32/1, base32/1]).
 
+-export([code_reload/1]).
+
 
 convert({string, String}) ->
     convert_string (String);
@@ -41,3 +43,9 @@ base32(V) ->
 	V > 25 -> [V+24]; % V-26+48+2
 	true -> V
     end.
+
+code_reload(Module) ->
+    error_logger:info_msg("~s", [os:cmd("cd .. && make")]),
+    true = code:soft_purge(Module),
+    code:load_file(Module).
+
