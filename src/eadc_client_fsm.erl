@@ -144,7 +144,7 @@ init([]) ->
     {list, List}=eadc_utils:convert({string, Data}),
     case List of
 	[[Header|Command_name]|Tail] ->
-	    A=(catch client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail)),
+	    catch client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail),
 	    ?DEBUG(debug, "Command recived '~s'~n", [Data]);
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n")
