@@ -3,7 +3,7 @@
   {description, "ADC-HUB writing in erlang"},
   {vsn, "0.1"},
   {id, "eadc"},
-  {modules,      [eadc_listener, eadc_client_fsm, eadc_utils]},
+  {modules,      [eadc_listener, eadc_client_fsm, eadc_utils, eadc_plugin]},
   {registered,   [tcp_server_sup, tcp_listener]},
   {applications, [kernel, stdlib]},
   %%
