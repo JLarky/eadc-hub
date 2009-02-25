@@ -22,7 +22,8 @@
 	  socket,    % client socket
 	  addr,      % client address
 	  sid,       % client's SID
-	  binf
+	  binf,      % bif string to send to other clients
+	  buf        % buffer for client commands
 	 }).
 
 -export([test/0]).
@@ -63,7 +64,7 @@ set_socket(Pid, Socket) when is_pid(Pid), is_port(Socket) ->
 %%-------------------------------------------------------------------------
 init([]) ->
     process_flag(trap_exit, true),
-    {ok, 'WAIT_FOR_SOCKET', #state{}}.
+    {ok, 'WAIT_FOR_SOCKET', #state{buf=[]}}.
 
 %%-------------------------------------------------------------------------
 %% Func: StateName/2
@@ -142,7 +143,7 @@ init([]) ->
     {list, List}=eadc_utils:convert({string, Data}),
     case List of
 	[[Header|Command_name]|Tail] ->
-	    client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail),
+	    A=(catch client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail)),
 	    ?DEBUG(debug, "Command recived '~s'~n", [Data]);
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n")
@@ -237,11 +238,19 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 %%          {stop, Reason, NewStateData}
 %% @private
 %%-------------------------------------------------------------------------
-handle_info({tcp, Socket, Bin}, StateName, #state{socket=Socket} = StateData) ->
+handle_info({tcp, Socket, Bin}, StateName, #state{socket=Socket, buf=Buf} = StateData) ->
     % Flow control: enable forwarding of next TCP message
     inet:setopts(Socket, [{active, once}]),
     Data = binary_to_list(Bin),
-    ?MODULE:StateName({data, Data}, StateData);
+    case {Buf, lists:last(Data)} of 
+	{[], 10} -> 
+	    ?MODULE:StateName({data, Data}, StateData);
+	{_, 10} ->
+	    ?MODULE:StateName({data, lists:concat([Buf,Data])}, StateData#state{buf=[]});
+	_ -> 
+	    {next_state, StateName, StateData#state{buf=lists:concat([Buf,Data])}}
+    end;
+
 
 handle_info({tcp_closed, Socket}, _StateName,
             #state{socket=Socket, addr=Addr} = StateData) ->

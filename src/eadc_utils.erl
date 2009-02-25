@@ -16,7 +16,7 @@ convert_string(String) ->
 			     $\  -> {[], [Buf|Acc]};
 			     _ -> {[Char | Buf], Acc}
 			 end
-		 end, {[],[]}, String), [Bu|Ac].
+		 end, {[],[]}, String), {list, [Bu|Ac]}.
 
 
 convert_list(Out, []) ->
