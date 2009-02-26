@@ -288,6 +288,8 @@ client_command(Header, Command, Args) ->
     String_to_send=lists:concat([Header, Command, " ", String]),
     Pids = case {Header,Command} of 
 	       {'B','MSG'} ->
+		   [Sid, Msg] = Args,
+		   eadc_plugin:hook(chat_msg, [{pid, self}, {msg, Msg},{sid,Sid}]),
 		   all_pids();
 	       {'E', 'MSG'} ->
 		   [Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid1), get_pid_by_sid(Sid2)];

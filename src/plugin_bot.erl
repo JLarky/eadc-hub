@@ -1,6 +1,7 @@
 -module(plugin_bot).
 
--export([user_login/1]).
+-export([user_login/1,
+	chat_msg/1]).
 
 -include("eadc.hrl").
 
@@ -10,3 +11,6 @@ user_login(Args) ->
     {string, String2} = eadc_utils:convert({list, ["ISTA", "000", "Добро пожаловать в ADC-хаб написанный на Erlang\n"]}),
     gen_fsm:send_event(Pid, {send_to_socket, String1}),
     gen_fsm:send_event(Pid, {send_to_socket, String2}).
+
+chat_msg(Args) ->
+    ?DEBUG(debug, "", Args).
