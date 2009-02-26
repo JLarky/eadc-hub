@@ -1,7 +1,7 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([convert/1, quote/1]).
+-export([convert/1, quote/1, cuteol/1]).
 -export([random_base32/1, base32/1]).
 
 -export([code_reload/1]).
@@ -10,7 +10,9 @@
 convert({string, String}) ->
     convert_string (String);
 convert({list, List}) when is_list(List) ->
-    convert_list(_Out=[], List).
+    convert_list(_Out=[], List);
+convert({args, List}) when is_list(List) ->
+    convert_args(_Out=[], List).
 
 convert_string(String) ->
     {Bu, Ac} = lists:foldr(fun(Char, {Buf, Acc}) ->
@@ -24,8 +26,15 @@ convert_string(String) ->
 convert_list(Out, []) ->
     {string, Out};
 convert_list( [], [H|T]) when is_list(H)->
-    convert_list(quote(H), T);
+    convert_list(H, T);
 convert_list(Out, [H|T]) when is_list(H)->
+    convert_list(Out++" "++H, T).
+
+convert_args(Out, []) ->
+    {string, Out};
+convert_args( [], [H|T]) when is_list(H)->
+    convert_list(quote(H), T);
+convert_args(Out, [H|T]) when is_list(H)->
     convert_list(Out++" "++quote(H), T).
 
 quote(String) ->
@@ -34,6 +43,8 @@ quote(String) ->
 					  Acc++"\\s";
 				      $\\ ->
 					  Acc++"\\\\";
+				      $\n ->
+					  Acc++"\\n";
 				      _ ->
 					  Acc++[Char]
 				  end end, [], String).
@@ -59,3 +70,5 @@ code_reload(Module) ->
     true = code:soft_purge(Module),
     code:load_file(Module).
 
+cuteol(String) ->
+    String.

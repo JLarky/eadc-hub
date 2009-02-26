@@ -12,7 +12,6 @@
 %% FSM States
 -export([
 	 'WAIT_FOR_SOCKET'/2,
-	 'WAIT_FOR_DATA'/2,
 	 'IDENTIFY STAGE'/2,
 	 'PROTOCOL STAGE'/2,
 	 'NORMAL STAGE'/2
@@ -101,7 +100,7 @@ init([]) ->
     end;
 
 'PROTOCOL STAGE'(timeout,  #state{socket=Socket} = State) ->
-    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out"),
+    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out\n"),
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
@@ -122,6 +121,7 @@ init([]) ->
 	    lists:foreach(fun(Pid) ->
 				  gen_fsm:send_event(Pid, {send_to_socket, Data})
 			  end, [self()|Other_clients]),
+	    %% gen_fsm:send_event(My_Pid, {send_to_socket, "IGPA A\n"}),
 	    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -129,7 +129,7 @@ init([]) ->
     end;
 
 'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
-    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out"),
+    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out\n"),
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
@@ -174,27 +174,13 @@ init([]) ->
 
 'NORMAL STAGE'({send_to_socket, Data}, #state{socket=Socket} = State) ->
     ?DEBUG(debug, "send_to_socket event '~s'~n", [Data]),
-    ok = gen_tcp:send(Socket, Data),
+    ok = gen_tcp:send(Socket, lists:concat([Data, "\n"])),
     {next_state, 'NORMAL STAGE', State};
 
 'NORMAL STAGE'(Other, State) ->
     ?DEBUG(debug, "Unknown message '~s' ~n", [Other]),
     {next_state, 'NORMAL STAGE', State}.
 
-
-%% Notification event coming from client
-'WAIT_FOR_DATA'({data, Data}, #state{socket=S} = State) ->
-    error_logger:info_msg("rcv data: '~s'\n", [Data]),
-    ok = gen_tcp:send(S, Data), %% echo
-    {next_state, 'WAIT_FOR_DATA', State, ?TIMEOUT};
-
-'WAIT_FOR_DATA'(timeout, State) ->
-    error_logger:error_msg("~p Client connection timeout - closing.\n", [self()]),
-    {stop, normal, State};
-
-'WAIT_FOR_DATA'(Data, State) ->
-    io:format("~p Ignoring data: ~p\n", [self(), Data]),
-    {next_state, 'WAIT_FOR_DATA', State, ?TIMEOUT}.
 
 %%-------------------------------------------------------------------------
 %% Func: handle_event/3
@@ -230,9 +216,11 @@ handle_info({tcp, Socket, Bin}, StateName, #state{socket=Socket, buf=Buf} = Stat
     %% Flow control: enable forwarding of next TCP message
     inet:setopts(Socket, [{active, once}]),
     Data = binary_to_list(Bin),
+    String = lists:delete($\n, Data),
+    ?DEBUG(debug, "", String), 
     case {Buf, lists:last(Data)} of 
 	{[], 10} -> 
-	    ?MODULE:StateName({data, Data}, StateData);
+	    ?MODULE:StateName({data, String}, StateData);
 	{_, 10} ->
 	    ?MODULE:StateName({data, lists:concat([Buf,Data])}, StateData#state{buf=[]});
 	_ -> 
@@ -289,7 +277,7 @@ client_command(Header, Command, Args) ->
     Pids = case {Header,Command} of 
 	       {'B','MSG'} ->
 		   [Sid, Msg] = Args,
-		   eadc_plugin:hook(chat_msg, [{pid, self}, {msg, Msg},{sid,Sid}]),
+		   eadc_plugin:hook(chat_msg, [{pid, self()}, {msg, Msg},{sid,Sid}]),
 		   all_pids();
 	       {'E', 'MSG'} ->
 		   [Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid1), get_pid_by_sid(Sid2)];
