@@ -92,7 +92,7 @@ init([]) ->
 	    {A,B,C}=time(), random:seed(A,B,C),
 	    ok = gen_tcp:send(Socket, "ISUP ADBASE ADTIGR\n"),
 	    Sid = get_unical_SID(),
-	    ok = gen_tcp:send(Socket, "ISID "++Sid ++ eadc_utils:random_base32(28) ++"\n"),
+	    ok = gen_tcp:send(Socket, "ISID "++Sid ++"\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -104,14 +104,16 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
-'IDENTIFY STAGE'({data, Data}, #state{socket=Socket}=State) ->
+'IDENTIFY STAGE'({data, Data}, #state{socket=Socket, addr=Addr}=State) ->
     ?DEBUG(debug, "String recived '~s'~n", [Data]),
     {list, List} = eadc_utils:convert({string, Data}),
     case List of
 	["BINF", SID | _] ->
-	    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
+	    ?DEBUG(debug, "New client with BINF= '~s'~n", [{Data, Addr}]),
 	    My_Pid=self(), Sid = list_to_atom(SID),
-	    New_State=State#state{binf=Data, sid=Sid},
+	    {I1,I2,I3,I4} = Addr,
+	    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4])]),
+	    New_State=State#state{binf=Inf, sid=Sid},
 	    Other_clients = all_pids(), %% важно, что перед операцией записи
 	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
 	    eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid}]),
@@ -119,7 +121,7 @@ init([]) ->
 				  gen_fsm:send_event(Pid, {new_client, My_Pid})
 			  end, Other_clients),
 	    lists:foreach(fun(Pid) ->
-				  gen_fsm:send_event(Pid, {send_to_socket, Data})
+				  gen_fsm:send_event(Pid, {send_to_socket, Inf})
 			  end, [self()|Other_clients]),
 	    %% gen_fsm:send_event(My_Pid, {send_to_socket, "IGPA A\n"}),
 	    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
@@ -146,24 +148,10 @@ init([]) ->
     end,
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'({inf_update, Inf_update}, #state{binf=Inf, sid=Sid} = State) ->
+'NORMAL STAGE'({inf_update, Inf_update}, #state{binf=Inf} = State) ->
     ?DEBUG(debug, "BINF Update '~w'~n", [Inf_update]),
     ?DEBUG(debug, "Old BINF '~s'~n", [Inf]),
-    {list, [_binf, _sid | Inf_list]} = eadc_utils:convert({string, Inf}),
-    New_Inf_list=
-	lists:foldl(
-	  fun(Cur_Inf_Elem, Inf_Acc) ->
-		  Updated_Inf_Elem = 
-		      lists:foldl(
-			fun(Cur_Upd_Elem, Inf_Elem_Acc) -> 
-				case lists:prefix(lists:sublist(Cur_Upd_Elem, 2), Inf_Elem_Acc) of
-				    true -> Cur_Upd_Elem;
-				    false -> Inf_Elem_Acc
-				end
-			end, Cur_Inf_Elem, Inf_update),
-		  [Updated_Inf_Elem|Inf_Acc]
-	  end, [], lists:reverse(Inf_list)),
-    {string, New_Inf} = eadc_utils:convert({list, ["BINF", atom_to_list(Sid) | New_Inf_list]}),
+    New_Inf=inf_update(Inf, Inf_update),
     ?DEBUG(debug, "New BINF '~s'~n", [New_Inf]),
     {next_state, 'NORMAL STAGE', State#state{binf=New_Inf}};
 
@@ -342,4 +330,24 @@ all_pids() ->
 test(String) ->
     [Pid | _] =all_pids(),
     gen_fsm:send_event(Pid, {send_to_socket, String}).
+
+
+
+inf_update(Inf, Inf_update) ->
+    {list, [_binf, Sid | Inf_list]} = eadc_utils:convert({string, Inf}),
+    New_Inf_list=
+	lists:foldl(
+	  fun(Cur_Inf_Elem, Inf_Acc) ->
+		  Updated_Inf_Elem = 
+		      lists:foldl(
+			fun(Cur_Upd_Elem, Inf_Elem_Acc) -> 
+				case lists:prefix(lists:sublist(Cur_Upd_Elem, 2), Inf_Elem_Acc) of
+				    true -> Cur_Upd_Elem;
+				    false -> Inf_Elem_Acc
+				end
+			end, Cur_Inf_Elem, Inf_update),
+		  [Updated_Inf_Elem|Inf_Acc]
+	  end, [], lists:reverse(Inf_list)),
+    {string, New_Inf} = eadc_utils:convert({list, ["BINF", Sid | New_Inf_list]}),
+    New_Inf.
 
