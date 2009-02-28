@@ -33,9 +33,9 @@ convert_list(Out, [H|T]) when is_list(H)->
 convert_args(Out, []) ->
     {string, Out};
 convert_args( [], [H|T]) when is_list(H)->
-    convert_list(quote(H), T);
+    convert_args(quote(H), T);
 convert_args(Out, [H|T]) when is_list(H)->
-    convert_list(Out++" "++quote(H), T).
+    convert_args(Out++" "++quote(H), T).
 
 quote(String) ->
     lists:foldl(fun(Char, Acc) -> case Char of
