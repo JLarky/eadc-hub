@@ -109,20 +109,24 @@ init([]) ->
     {list, List} = eadc_utils:convert({string, Data}),
     case List of
 	["BINF", SID | _] ->
-	    ?DEBUG(debug, "New client with BINF= '~s'~n", [{Data, Addr}]),
+	    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
 	    My_Pid=self(), Sid = list_to_atom(SID),
 	    {I1,I2,I3,I4} = Addr,
 	    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4])]),
 	    New_State=State#state{binf=Inf, sid=Sid},
 	    Other_clients = all_pids(), %% важно, что перед операцией записи
 	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
-	    eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid}]),
-	    lists:foreach(fun(Pid) ->
-				  gen_fsm:send_event(Pid, {new_client, My_Pid})
-			  end, Other_clients),
-	    lists:foreach(fun(Pid) ->
-				  gen_fsm:send_event(Pid, {send_to_socket, Inf})
-			  end, [self()|Other_clients]),
+	    case eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid}]) of
+		true ->
+		    plugin_interupt;
+		false ->
+		    lists:foreach(fun(Pid) ->
+					  gen_fsm:send_event(Pid, {new_client, My_Pid})
+				  end, Other_clients),
+		    lists:foreach(fun(Pid) ->
+					  gen_fsm:send_event(Pid, {send_to_socket, Inf})
+				  end, [self()|Other_clients])
+	    end,		    
 	    %% gen_fsm:send_event(My_Pid, {send_to_socket, "IGPA A\n"}),
 	    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
 	_ ->
@@ -265,8 +269,10 @@ client_command(Header, Command, Args) ->
     Pids = case {Header,Command} of 
 	       {'B','MSG'} ->
 		   [Sid, Msg] = Args,
-		   eadc_plugin:hook(chat_msg, [{pid, self()}, {msg, Msg},{sid,Sid}]),
-		   all_pids();
+		   case eadc_plugin:hook(chat_msg, [{pid, self()}, {msg, Msg},{sid,Sid}]) of
+		       true -> [];
+		       false -> all_pids()
+		   end;
 	       {'E', 'MSG'} ->
 		   [Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid1), get_pid_by_sid(Sid2)];
 	       {'D', 'RCM'} ->

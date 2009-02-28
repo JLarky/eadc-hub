@@ -11,18 +11,21 @@
 %%% API
 %%%------------------------------------------------------------------------
 
-hook(Hook, Args) ->
-    lists:foreach(
+hook(Hook, Args) -> %% применяем все плагины
+    lists:any(      %% если кто-то вернёт true то прерываемся  
       fun(Plugin) ->
 	      A= case (catch Plugin:Hook(Args)) of
 		     {'EXIT',{undef,_}} ->
-			 undef;
+			 false;
 		     {'EXIT', Error} ->
-			 {error, Error};
+			 ?DEBUG(error, "Error in module ~s with hook ~s - ~w",
+				[Plugin, Hook, Error]),
+			 false;
 		     Other ->
 			 Other
-		 end,		 
-	      ?DEBUG(debug, "~s:~s\n~w\n", [Plugin, Hook, A])
+		 end,
+	      ?DEBUG(debug, "~s:~s\n~w\n", [Plugin, Hook, A]),
+	      A
       end, get_plugins()).
 
 
