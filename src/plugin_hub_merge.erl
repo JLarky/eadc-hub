@@ -10,7 +10,20 @@
 
 -include("eadc.hrl").
 
--export([chat_msg/1, master_command/1]).
+-export([user_login/1, chat_msg/1, master_command/1]).
+
+-define(GET_VAL(Key, Val), {value,{Key,Val}} = lists:keysearch(Key, 1, Args)).
+-define(SEND_TO_NODES(Msg), lists:foreach(fun(Node) ->
+						  {eadc_master, Node} ! {self(), Msg}
+					  end, nodes())).
+user_login(Args) ->
+    ?DEBUG(debug, "user_l: ~w~n", [Args]),
+    ?GET_VAL(sid, Sid),
+    ?GET_VAL(pid, Pid),
+    ?GET_VAL(inf, Inf),
+    ?SEND_TO_NODES({command, 'new_client', [{inf, Inf}, {pid, Pid}]}), 
+    ?DEBUG(debug, "user_l: ~w~n", [{Sid,Pid}]),
+    false.
 
 chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
