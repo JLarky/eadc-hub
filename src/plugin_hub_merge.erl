@@ -22,5 +22,13 @@ chat_msg(Args) ->
 
 master_command(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
-    %%{value,{cmd, Cmd}} = lists:keysearch(msg, 1, Args),
+    {value,{cmd, Cmd}} = lists:keysearch(cmd, 1, Args),
+    {value,{args, Arg}} = lists:keysearch(args, 1, Args),
+    case Cmd of
+	'BMSG' ->
+	    lists:foreach(fun(Client) ->
+				  {string, String} = eadc_utils:convert({list, ["BMSG", "AAAA", eadc_utils:quote("From other hub: ")++Arg]}),
+				  gen_fsm:send_event(Client, {send_to_socket, String})
+			  end, eadc_client_fsm:all_pids())
+    end,
     false.
