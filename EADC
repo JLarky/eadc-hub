@@ -1,2 +1,2 @@
 (cd ebin
-erl -boot eadc)
+erl -boot eadc $@)
