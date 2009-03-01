@@ -82,12 +82,18 @@ handle_cast(_Msg, State) ->
 %% @private
 %%-------------------------------------------------------------------------
 
-handle_info({_Pid, {command, _}}=Message, State) ->
-    case (catch client_message(Message)) of
-	{'EXIT', Error} ->
-	    error_logger:error_msg("Error in master\n", [Error]);
-	_ ->
-	    ok
+handle_info({Pid, {command, C_Name, C_Args}}=Message, State) ->
+    case eadc_plugin:hook(master_command, [{pid, Pid}, {cmd, C_Name},
+					   {args, C_Args}]) of
+	true ->
+	    ok;
+	false ->
+	    case (catch client_message(Message)) of
+		{'EXIT', Error} ->
+		    error_logger:error_msg("Error in master\n", [Error]);
+		_ ->
+		    ok
+	    end
     end,
     {noreply, State};
 

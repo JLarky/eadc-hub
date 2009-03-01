@@ -4,7 +4,7 @@
 %% hook
 -export([hook/2]).
 
--define(PLUGINS, [plugin_bot]).
+-define(PLUGINS, [plugin_bot, plugin_hub_merge]).
 -include("eadc.hrl").
 
 %%%------------------------------------------------------------------------
