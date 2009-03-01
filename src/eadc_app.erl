@@ -24,7 +24,7 @@ start_client() ->
 %%----------------------------------------------------------------------
 start(_Type, _Args) ->
     ets:new(eadc_clients, [set, named_table, public,{keypos,2}]),
-    ListenPort = get_app_env(listen_port, ?DEF_PORT),
+    ListenPort = list_to_integer(get_app_env(listen_port, integer_to_list(?DEF_PORT))),
     supervisor:start_link({local, ?MODULE}, ?MODULE, {eadc_sup, ListenPort, eadc_client_fsm}).
 
 stop(_S) ->
@@ -86,10 +86,10 @@ init([Module]) ->
 %%----------------------------------------------------------------------
 get_app_env(Opt, Default) ->
     case application:get_env(application:get_application(), Opt) of
-    {ok, Val} -> Val;
-    _ ->
-        case init:get_argument(Opt) of
-        [[Val | _]] -> Val;
-        error       -> Default
-        end
+	{ok, Val} -> Val;
+	_ ->
+	    case init:get_argument(Opt) of
+		{ok, [[Val | _]]} -> Val;
+		error       -> Default
+	    end
     end.
