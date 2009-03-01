@@ -25,6 +25,9 @@
 	  buf        % buffer for client messages sended in several tcp pockets
 	 }).
 
+%% HELPING FUNCTIONS
+-export([all_pids/0]).
+
 %% DEBUG
 -export([test/1, get_sid_by_pid/1]).
 
