@@ -249,6 +249,7 @@ terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}) ->
     lists:foreach(fun(Pid) ->
 			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
 		  end, all_pids()),
+    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send}]),
     (catch gen_tcp:send(Socket, String_to_send)),
     (catch gen_tcp:close(Socket)),
     ok.

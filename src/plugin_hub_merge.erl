@@ -10,7 +10,8 @@
 
 -include("eadc.hrl").
 
--export([user_login/1, chat_msg/1, master_command/1]).
+-export([user_login/1, chat_msg/1, user_quit/1,
+	 master_command/1]).
 
 -define(GET_VAL(Key, Val), {value,{Key,Val}} = lists:keysearch(Key, 1, Args)).
 -define(SEND_TO_NODES(Msg), lists:foreach(fun(Node) ->
@@ -33,15 +34,44 @@ chat_msg(Args) ->
 		  end, nodes()),
     false.
 
+user_quit(Args) ->
+    ?GET_VAL(msg, Msg),
+    broadcast_string(Msg),
+    ?DEBUG(debug, "User quit ~s", [Msg]).
+
 master_command(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
     {value,{cmd, Cmd}} = lists:keysearch(cmd, 1, Args),
-    {value,{args, Arg}} = lists:keysearch(args, 1, Args),
+    %%{value,{args, Arg}} = lists:keysearch(args, 1, Args),
+    ?GET_VAL(args, Arg),
     case Cmd of
 	'BMSG' ->
-	    lists:foreach(fun(Client) ->
-				  {string, String} = eadc_utils:convert({list, ["BMSG", "AAAA", eadc_utils:quote("From other hub: ")++Arg]}),
-				  gen_fsm:send_event(Client, {send_to_socket, String})
-			  end, eadc_client_fsm:all_pids())
+	    m_chat_msg(Arg);
+	new_client ->
+	    m_new_client(Arg)
     end,
     false.
+
+m_chat_msg(Msg) ->
+    broadcast(
+      fun(Client) ->
+	      {string, String} = 
+		  eadc_utils:convert(
+		    {list, ["BMSG", "AAAA",
+			    eadc_utils:quote("From other hub: ")++Msg]}),
+	      gen_fsm:send_event(Client, {send_to_socket, String})
+      end).
+
+m_new_client(Args) ->
+    ?GET_VAL(inf, Inf),
+    broadcast_string(Inf),
+    ?DEBUG(debug, "!!!!!!! ~w", Args).
+
+broadcast_string(String) -> 
+    broadcast(
+      fun(Client) ->
+	      gen_fsm:send_event(Client, {send_to_socket, String})
+      end).
+
+broadcast(F) ->
+    lists:foreach(F, eadc_client_fsm:all_pids()).
