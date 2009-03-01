@@ -119,7 +119,8 @@ init([]) ->
 	    New_State=State#state{binf=Inf, sid=Sid},
 	    Other_clients = all_pids(), %% важно, что перед операцией записи
 	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
-	    case eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid}]) of
+	    case eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid},
+					      {inf, Inf}]) of
 		true ->
 		    plugin_interupt;
 		false ->
