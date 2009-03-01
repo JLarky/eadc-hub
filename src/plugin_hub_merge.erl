@@ -30,7 +30,7 @@ chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
     ?GET_VAL(msg, Msg),
     ?GET_VAL(sid, Sid),
-    ?SEND_TO_NODES({command, 'BMSG', [{msg, Msg}, {sid, Sid}]}),
+    ?SEND_TO_NODES({command, chat_msg, [{msg, Msg}, {sid, Sid}]}),
     false.
 
 user_quit(Args) ->
@@ -45,7 +45,7 @@ master_command(Args) ->
     %%{value,{args, Arg}} = lists:keysearch(args, 1, Args),
     ?GET_VAL(args, Arg),
     case Cmd of
-	'BMSG' ->
+	chat_msg ->
 	    m_chat_msg(Arg);
 	new_client ->
 	    m_new_client(Arg);
@@ -57,14 +57,8 @@ master_command(Args) ->
 m_chat_msg(Args) ->
     ?GET_VAL(msg, Msg),
     ?GET_VAL(sid, Sid),
-    broadcast(
-      fun(Client) ->
-	      {string, String} = 
-		  eadc_utils:convert(
-		    {list, ["BMSG", Sid,
-			    eadc_utils:quote("From other hub: ")++Msg]}),
-	      gen_fsm:send_event(Client, {send_to_socket, String})
-      end).
+    {string, String} = eadc_utils:convert({list, ["BMSG", Sid, Msg]}),
+    broadcast_string(String).
 
 m_new_client(Args) ->
     ?GET_VAL(inf, Inf),
