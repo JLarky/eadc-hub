@@ -16,7 +16,7 @@ chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
     {value,{msg,Msg}} = lists:keysearch(msg, 1, Args),
     lists:foreach(fun(Node) ->
-			  {eadc_master, Node} ! {msg, Msg}
+			  {eadc_master, Node} ! {self(), {command, 'BMSG', Msg}}
 		  end, nodes()),
     false.
 
