@@ -36,8 +36,9 @@ chat_msg(Args) ->
 
 user_quit(Args) ->
     ?GET_VAL(msg, Msg),
-    broadcast_string(Msg),
-    ?DEBUG(debug, "User quit ~s", [Msg]).
+    ?SEND_TO_NODES({command, 'user_quit', [{msg, Msg}]}), 
+    ?DEBUG(debug, "User quit ~s", [Msg]),
+    false.
 
 master_command(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
@@ -48,7 +49,9 @@ master_command(Args) ->
 	'BMSG' ->
 	    m_chat_msg(Arg);
 	new_client ->
-	    m_new_client(Arg)
+	    m_new_client(Arg);
+	user_quit ->
+	    m_user_quit(Arg)
     end,
     false.
 
@@ -65,6 +68,11 @@ m_chat_msg(Msg) ->
 m_new_client(Args) ->
     ?GET_VAL(inf, Inf),
     broadcast_string(Inf),
+    ?DEBUG(debug, "!!!!!!! ~w", Args).
+
+m_user_quit(Args) ->
+    ?GET_VAL(msg, Msg),
+    broadcast_string(Msg),
     ?DEBUG(debug, "!!!!!!! ~w", Args).
 
 broadcast_string(String) -> 
