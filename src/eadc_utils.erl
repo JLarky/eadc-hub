@@ -6,6 +6,9 @@
 
 -export([code_reload/1]).
 
+-export([broadcast/1, send_to_pid/2]).
+
+-include("eadc.hrl").
 
 convert({string, String}) ->
     convert_string (String);
@@ -72,3 +75,22 @@ code_reload(Module) ->
 
 cuteol(String) ->
     String.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Comunication functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+send_to_pid(Pid, {list, List}) when is_list(List) ->
+    {string, String} = eadc_utils:convert({list, List}),
+    eadc_utils:send_to_pid(Pid, String);
+send_to_pid(Pid, {args, List}) when is_list(List) ->
+    {string, String} = eadc_utils:convert({args, List}),
+    eadc_utils:send_to_pid(Pid, String);
+send_to_pid(Pid, String) when is_pid(Pid) and is_list(String) ->
+    gen_fsm:send_event(Pid, {send_to_socket, String}).
+
+broadcast({string,String}) when is_list(String) -> 
+    broadcast(fun(Client) -> send_to_pid(Client, String) end);
+broadcast(F) when is_function(F) ->
+    lists:foreach(F, eadc_client_fsm:all_pids()).
