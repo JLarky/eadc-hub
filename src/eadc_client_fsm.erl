@@ -93,7 +93,7 @@ init([]) ->
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
 	    {A,B,C}=time(), random:seed(A,B,C),
-	    ok = gen_tcp:send(Socket, "ISUP ADBASE ADTIGR\n"),
+	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
 	    Sid = get_unical_SID(),
 	    ok = gen_tcp:send(Socket, "ISID "++Sid ++"\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
@@ -151,8 +151,11 @@ init([]) ->
 	[[Header|Command_name]|Tail] ->
 	    catch client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail),
 	    ?DEBUG(debug, "Command recived '~s'~n", [Data]);
-	_ ->
-	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n")
+	[[]] ->
+	    keep_alive;
+	Other ->
+	    ?DEBUG(error, "Unknown command '~w'", [Other]),
+	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\serror\n")
     end,
     {next_state, 'NORMAL STAGE', State};
 
