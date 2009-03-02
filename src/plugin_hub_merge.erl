@@ -22,6 +22,10 @@ user_login(Args) ->
     ?GET_VAL(sid, Sid),
     ?GET_VAL(pid, Pid),
     ?GET_VAL(inf, Inf),
+    %% ICMD Luadch\sCommands\\General\\Help TTBMSG\s%[mySID]\s+help\\s\n CT1
+    {string, String} = eadc_utils:convert({args, ["ICMD", "Luadch\sCommands\\General\\Help",
+						  "TTBMSG\s%[mySID]\s+help\\s\n", "CT1"]}),
+    gen_fsm:send_event(Pid, {send_to_socket, String}),
     ?SEND_TO_NODES({command, 'new_client', [{inf, Inf}, {pid, Pid}]}), 
     ?DEBUG(debug, "user_l: ~w~n", [{Sid,Pid}]),
     false.
