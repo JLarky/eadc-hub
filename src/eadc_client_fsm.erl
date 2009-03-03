@@ -161,10 +161,9 @@ init([]) ->
     {list, Message}=eadc_utils:convert({string, Data}),
     case Message of
 	[[Header|Command_name]|Tail] ->
-	    ?DEBUG(debug, "Command recived '~s'~n", [Data]),
 	    H = list_to_atom([Header]),Cmd=list_to_atom(Command_name),
 	    Res = (catch handle_command(H, Cmd, Tail, Data, State)),
-	    ?DEBUG(debug, "command result ~w", [Res]);    
+	    ?DEBUG(debug, "command result ~w\n", [Res]);    
 	[[]] ->
 	    keep_alive;
 	Other ->
