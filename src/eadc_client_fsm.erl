@@ -21,7 +21,7 @@
 	  socket,    % client socket
 	  addr,      % client address
 	  sid,       % client's SID
-	  binf,      % bif string to send to other clients
+	  inf,       % INF string to send to other clients
 	  buf,       % buffer for client messages sended in several tcp pockets
 	  nick
 	 }).
@@ -90,14 +90,14 @@ init([]) ->
     {next_state, 'WAIT_FOR_SOCKET', State}.
 
 'PROTOCOL STAGE'({data, Data}, #state{socket=Socket} = State) ->
-    ?DEBUG(debug, "Data recived ~w~n", [Data]),
+    ?DEBUG(debug, "Data recived '~s'~n", [Data]),
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
 	    {A,B,C}=time(), random:seed(A,B,C),
 	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
 	    Sid = get_unical_SID(),
 	    ok = gen_tcp:send(Socket, "ISID "++Sid ++"\n"),
-	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT};
+	    {next_state, 'IDENTIFY STAGE', State#state{sid=list_to_atom(Sid)}, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
@@ -108,34 +108,40 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
-'IDENTIFY STAGE'({data, Data}, #state{socket=Socket, addr=Addr}=State) ->
+'IDENTIFY STAGE'({data, Data}, #state{socket=Socket, addr=Addr, sid=Sid}=State) ->
     ?DEBUG(debug, "String recived '~s'~n", [Data]),
     {list, List} = eadc_utils:convert({string, Data}),
     case List of
 	["BINF", SID | _] ->
-	    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
-	    My_Pid=self(), Sid = list_to_atom(SID),
-	    {I1,I2,I3,I4} = Addr,
-	    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4])]),
-	    P_Inf=eadc_utils:parse_inf(Inf),
-	    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
-	    New_State=State#state{binf=Inf, sid=Sid, nick=Nick},
-	    Other_clients = all_pids(), %% важно, что перед операцией записи
-	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
-	    case eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid}, {nick, Nick},
-					      {inf, Inf}]) of
-		true ->
-		    plugin_interupt;
+	    case list_to_atom(SID) == Sid of
 		false ->
-		    lists:foreach(fun(Pid) ->
-					  gen_fsm:send_event(Pid, {new_client, My_Pid})
-				  end, Other_clients),
-		    lists:foreach(fun(Pid) ->
-					  gen_fsm:send_event(Pid, {send_to_socket, Inf})
-				  end, [self()|Other_clients])
-	    end,		    
-	    %% gen_fsm:send_event(My_Pid, {send_to_socket, "IGPA A\n"}),
-	    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
+		    gen_tcp:send(Socket,"ISTA 240 "++eadc_utils:quote("SID is not correct")++"\n"),
+		    {stop, normal, State};	    
+		true ->
+		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
+		    My_Pid=self(), Sid = list_to_atom(SID),
+		    {I1,I2,I3,I4} = Addr,
+		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4])]),
+		    P_Inf=eadc_utils:parse_inf(Inf),
+		    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
+		    New_State=State#state{inf=Inf, nick=Nick},
+		    Other_clients = all_pids(), %% важно, что перед операцией записи
+		    Args=[{sid,SID},{pid,My_Pid}, {nick, Nick}, {inf, Inf}],
+		    case eadc_plugin:hook(user_login, Args) of
+			true ->
+			    plugin_interupt;
+			false ->
+			    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
+			    lists:foreach(fun(Pid) ->
+						  gen_fsm:send_event(Pid, {new_client, My_Pid})
+					  end, Other_clients),
+			    lists:foreach(fun(Pid) ->
+						  gen_fsm:send_event(Pid, {send_to_socket, Inf})
+					  end, [self()|Other_clients])
+		    end,		    
+		    %% gen_fsm:send_event(My_Pid, {send_to_socket, "IGPA A\n"})
+		    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT}
+	    end;
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
@@ -145,34 +151,74 @@ init([]) ->
     'NORMAL STAGE'({send_to_socket, Data}, State);
 
 'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
-    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out\n"),
+    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout\n"),
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
 
 'NORMAL STAGE'({data, Data}, #state{socket=Socket} = State) ->
     ?DEBUG(debug, "DATA recived '~s'~n", [Data]),
-    {list, List}=eadc_utils:convert({string, Data}),
-    case List of
+    {list, Message}=eadc_utils:convert({string, Data}),
+    case Message of
+	%% сють хаба по хедеру понять где взять цели куда нужно
+	%% посылать сообщение, лишь иногда хабу нужно как-то менять
+	%% посылаемое сообещение или не посылать его вовсе
+
+	%% в итоге: берём хедер, получаем список получаетелей и шлём.
 	[[Header|Command_name]|Tail] ->
-	    catch client_command(list_to_atom([Header]), list_to_atom(Command_name), Tail),
-	    ?DEBUG(debug, "Command recived '~s'~n", [Data]);
+	    ?DEBUG(debug, "Command recived '~s'~n", [Data]),
+	    H = list_to_atom([Header]),Cmd=list_to_atom(Command_name),
+	    {Pids, Args} = %% в данном случае мы получаем список получателей
+		case H of  %% и параметры для обработчика одним махом =)
+		    'B' ->
+			[MySid | Par] = Tail, 
+			{all_pids(), 
+			 [{par, Par}, {my_sid, MySid}]};
+		    'I' ->
+			{[], 
+			 [{par, Tail}]};
+		    'H' ->
+			{[], 
+			 [{par, Tail}]};
+		    'D' ->
+			[MySid, TSid | Par] = Tail, 
+			{[get_pid_by_sid(TSid)], 
+			 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
+		    'E' ->
+			[MySid, TSid | Par] = Tail, 
+			{[get_pid_by_sid(MySid), get_pid_by_sid(TSid)], 
+			 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
+		    'F' ->
+			[MySid | Par] = Tail,
+			{all_pids(), 
+			 [{par, Par}, {my_sid, MySid}]}
+		end,
+	    %% {value,{par,Params}} = lists:keysearch(par, 1, Args),
+	    case client_command(H, Cmd, [{data, Data}|Args], Pids, State) of
+		true ->
+		    some_reason_not_to_do_default_action;
+		false -> %% do default
+		    lists:foreach(
+		      fun(Pid) ->
+			      gen_fsm:send_event(Pid, {send_to_socket, Data})
+		      end, Pids)
+	    end;
 	[[]] ->
 	    keep_alive;
 	Other ->
-	    ?DEBUG(error, "Unknown command '~w'", [Other]),
+	    ?DEBUG(error, "Unknown message '~w'", [Other]),
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\serror\n")
     end,
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'({inf_update, Inf_update}, #state{binf=Inf} = State) ->
+'NORMAL STAGE'({inf_update, Inf_update}, #state{inf=Inf} = State) ->
     ?DEBUG(debug, "BINF Update '~w'~n", [Inf_update]),
     ?DEBUG(debug, "Old BINF '~s'~n", [Inf]),
     New_Inf=inf_update(Inf, Inf_update),
     ?DEBUG(debug, "New BINF '~s'~n", [New_Inf]),
-    {next_state, 'NORMAL STAGE', State#state{binf=New_Inf}};
+    {next_state, 'NORMAL STAGE', State#state{inf=New_Inf}};
 
-'NORMAL STAGE'({new_client, Pid}, #state{binf=BINF} = State) ->
+'NORMAL STAGE'({new_client, Pid}, #state{inf=BINF} = State) ->
     ?DEBUG(debug, "new_client event from ~w \n", [Pid]),
     gen_fsm:send_event(Pid, {send_to_socket, BINF}),
     {next_state, 'NORMAL STAGE', State};
@@ -222,7 +268,7 @@ handle_info({tcp, Socket, Bin}, StateName, #state{socket=Socket, buf=Buf} = Stat
     inet:setopts(Socket, [{active, once}]),
     Data = binary_to_list(Bin),
     String = lists:delete($\n, Data),
-    ?DEBUG(debug, "", String), 
+    ?DEBUG(debug, "tcp string '~s'", [String]), 
     case {Buf, lists:last(Data)} of 
 	{[], 10} -> 
 	    ?MODULE:StateName({data, String}, StateData);
@@ -277,45 +323,29 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%% Internal functions
 %%%------------------------------------------------------------------------
 
-client_command(Header, Command, Args) ->
-    {string, String}=eadc_utils:convert({list, Args}),
-    String_to_send=lists:concat([Header, Command, " ", String]),
-    Pids = case {Header,Command} of 
-	       {'B','MSG'} ->
-		   [Sid, Msg] = Args,
-		   case eadc_plugin:hook(chat_msg, [{pid, self()}, {msg, Msg},{sid,Sid}, {nick, "Unknown"}]) of
-		       true -> [];
-		       false -> all_pids()
-		   end;
-	       {'E', 'MSG'} ->
-		   [Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid1), get_pid_by_sid(Sid2)];
-	       {'D', 'RCM'} ->
-		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
-	       {'D', 'CTM'} ->
-		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
-	       {'B', 'INF'} ->
-		   [_sid | Filds] = Args,
-		   gen_fsm:send_event(self(), {inf_update, Filds}),
-		   all_pids();
-	       {'B', 'SCH'} ->
-		   all_pids();
-	       {'F', 'SCH'} ->
-		   all_pids(); %% надо бы искать по признаку поддержки фичи
-	       {'D', 'RES'} ->
-		   [_Sid1, Sid2 | _] = Args, [get_pid_by_sid(Sid2)];
-	       {place, holder} ->
-		   ok
-	   end,
-    lists:foreach(fun(Pid) ->
-			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
-		  end, Pids).
-
-
+client_command(Header, Command, Args, _Pids, State) ->
+    Res =
+	case {Header,Command} of 
+	    {'B','MSG'} ->
+		[Msg]=get_val(par, Args),
+		Nick=State#state.nick,
+		Sid=list_to_atom(get_val(my_sid, Args)),
+		?DEBUG(debug, "client_command: chat_msg hook", []),
+		eadc_plugin:hook(chat_msg, [{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick}]);
+	    {_place, _holder} ->
+		false
+	end,
+    %%?DEBUG(debug, "client_command: ~w", [{Header, Command, Args, Pids, State}]),
+    Res.
 
 
 %%%------------------------------------------------------------------------                                                                                            
 %%% Helping functions                                                                                            
 %%%------------------------------------------------------------------------
+
+get_val(Key, Args) -> 
+    {value,{Key, Val}} = lists:keysearch(Key, 1, Args), Val.
+
 
 get_unical_SID() ->
     Sid = eadc_utils:random_base32(4),
@@ -350,7 +380,6 @@ all_pids() ->
 test(String) ->
     [Pid | _] =all_pids(),
     gen_fsm:send_event(Pid, {send_to_socket, String}).
-
 
 
 inf_update(Inf, Inf_update) ->
