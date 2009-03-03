@@ -22,7 +22,8 @@
 	  addr,      % client address
 	  sid,       % client's SID
 	  binf,      % bif string to send to other clients
-	  buf        % buffer for client messages sended in several tcp pockets
+	  buf,       % buffer for client messages sended in several tcp pockets
+	  nick
 	 }).
 
 %% HELPING FUNCTIONS
@@ -116,10 +117,12 @@ init([]) ->
 	    My_Pid=self(), Sid = list_to_atom(SID),
 	    {I1,I2,I3,I4} = Addr,
 	    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4])]),
-	    New_State=State#state{binf=Inf, sid=Sid},
+	    P_Inf=eadc_utils:parse_inf(Inf),
+	    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
+	    New_State=State#state{binf=Inf, sid=Sid, nick=Nick},
 	    Other_clients = all_pids(), %% важно, что перед операцией записи
-	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid}),
-	    case eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid},
+	    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
+	    case eadc_plugin:hook(user_login, [{sid,SID},{pid,My_Pid}, {nick, Nick},
 					      {inf, Inf}]) of
 		true ->
 		    plugin_interupt;
@@ -137,6 +140,9 @@ init([]) ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
     end;
+
+'IDENTIFY STAGE'({send_to_socket, Data}, State) ->
+    'NORMAL STAGE'({send_to_socket, Data}, State);
 
 'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
     ok = gen_tcp:send(Socket, "Protocol Error: connection timed out\n"),
@@ -277,7 +283,7 @@ client_command(Header, Command, Args) ->
     Pids = case {Header,Command} of 
 	       {'B','MSG'} ->
 		   [Sid, Msg] = Args,
-		   case eadc_plugin:hook(chat_msg, [{pid, self()}, {msg, Msg},{sid,Sid}]) of
+		   case eadc_plugin:hook(chat_msg, [{pid, self()}, {msg, Msg},{sid,Sid}, {nick, "Unknown"}]) of
 		       true -> [];
 		       false -> all_pids()
 		   end;
@@ -364,4 +370,3 @@ inf_update(Inf, Inf_update) ->
 	  end, [], lists:reverse(Inf_list)),
     {string, New_Inf} = eadc_utils:convert({list, ["BINF", Sid | New_Inf_list]}),
     New_Inf.
-

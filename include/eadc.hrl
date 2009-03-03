@@ -15,5 +15,6 @@
 
 -record(client, {
 	  sid, %% SID
-	  pid  %% PID
+	  pid, %% PID
+	  nick
 	  }).

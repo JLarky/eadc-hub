@@ -5,6 +5,7 @@
 -export([random_base32/1, base32/1]).
 
 -export([code_reload/1]).
+-export([parse_inf/1]).
 
 -export([broadcast/1, send_to_pid/2]).
 
@@ -75,6 +76,13 @@ code_reload(Module) ->
 
 cuteol(String) ->
     String.
+
+
+parse_inf(Inf) ->
+    {list, List} = convert({string, Inf}),
+    lists:map(fun([H1,H2|T]) ->
+		      {list_to_atom([H1,H2]), T}
+	      end, List).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -2,7 +2,7 @@ ERLC=erlc -o ebin -I include/
 
 all: ebin/eadc_client_fsm.beam ebin/eadc_listener.beam ebin/eadc_app.beam \
 	 ebin/eadc_utils.beam ebin/eadc_master.beam ebin/eadc_plugin.beam \
-	ebin/plugin_bot.beam ebin/plugin_hub_merge.beam
+	ebin/plugin_bot.beam ebin/plugin_hub_merge.beam ebin/plugin_ten_lines.beam
 
 ebin/eadc_client_fsm.beam: src/eadc_client_fsm.erl
 	$(ERLC) $^
@@ -19,6 +19,8 @@ ebin/eadc_plugin.beam: src/eadc_plugin.erl
 ebin/plugin_bot.beam: src/plugin_bot.erl
 	$(ERLC) $^
 ebin/plugin_hub_merge.beam: src/plugin_hub_merge.erl
+	$(ERLC) $^
+ebin/plugin_ten_lines.beam: src/plugin_ten_lines.erl
 	$(ERLC) $^
 
 boot: all
