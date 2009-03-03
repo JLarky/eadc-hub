@@ -163,6 +163,12 @@ init([]) ->
 	[[Header|Command_name]|Tail] ->
 	    H = list_to_atom([Header]),Cmd=list_to_atom(Command_name),
 	    Res = (catch handle_command(H, Cmd, Tail, Data, State)),
+	    case Res of
+		{'EXIT', Error} ->
+		    Msg_to_send= lists:flatten(io_lib:format("Error: ~w",[Error])),
+		    eadc_utils:send_to_pid(self(), {args, ["ISTA", "000", Msg_to_send]});
+		_ -> everything_is_fine
+	    end,
 	    ?DEBUG(debug, "command result ~w\n", [Res]);    
 	[[]] ->
 	    keep_alive;
