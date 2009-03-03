@@ -160,49 +160,11 @@ init([]) ->
     ?DEBUG(debug, "DATA recived '~s'~n", [Data]),
     {list, Message}=eadc_utils:convert({string, Data}),
     case Message of
-	%% сють хаба по хедеру понять где взять цели куда нужно
-	%% посылать сообщение, лишь иногда хабу нужно как-то менять
-	%% посылаемое сообещение или не посылать его вовсе
-
-	%% в итоге: берём хедер, получаем список получаетелей и шлём.
 	[[Header|Command_name]|Tail] ->
 	    ?DEBUG(debug, "Command recived '~s'~n", [Data]),
 	    H = list_to_atom([Header]),Cmd=list_to_atom(Command_name),
-	    {Pids, Args} = %% в данном случае мы получаем список получателей
-		case H of  %% и параметры для обработчика одним махом =)
-		    'B' ->
-			[MySid | Par] = Tail, 
-			{all_pids(), 
-			 [{par, Par}, {my_sid, MySid}]};
-		    'I' ->
-			{[], 
-			 [{par, Tail}]};
-		    'H' ->
-			{[], 
-			 [{par, Tail}]};
-		    'D' ->
-			[MySid, TSid | Par] = Tail, 
-			{[get_pid_by_sid(TSid)], 
-			 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
-		    'E' ->
-			[MySid, TSid | Par] = Tail, 
-			{[get_pid_by_sid(MySid), get_pid_by_sid(TSid)], 
-			 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
-		    'F' ->
-			[MySid | Par] = Tail,
-			{all_pids(), 
-			 [{par, Par}, {my_sid, MySid}]}
-		end,
-	    %% {value,{par,Params}} = lists:keysearch(par, 1, Args),
-	    case client_command(H, Cmd, [{data, Data}|Args], Pids, State) of
-		true ->
-		    some_reason_not_to_do_default_action;
-		false -> %% do default
-		    lists:foreach(
-		      fun(Pid) ->
-			      gen_fsm:send_event(Pid, {send_to_socket, Data})
-		      end, Pids)
-	    end;
+	    Res = (catch handle_command(H, Cmd, Tail, Data, State)),
+	    ?DEBUG(debug, "command result ~w", [Res]);    
 	[[]] ->
 	    keep_alive;
 	Other ->
@@ -322,6 +284,50 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%%------------------------------------------------------------------------
 %%% Internal functions
 %%%------------------------------------------------------------------------
+
+
+%% суть хаба по хедеру понять где взять цели куда нужно
+%% посылать сообщение, лишь иногда хабу нужно как-то менять
+%% посылаемое сообещение или не посылать его вовсе
+
+%% в итоге: берём хедер, получаем список получаетелей и шлём.
+handle_command(H, Cmd, Tail, Data, State) ->
+    {Pids, Args} = %% в данном случае мы получаем список получателей
+	case H of  %% и параметры для обработчика одним махом =)
+	    'B' ->
+		[MySid | Par] = Tail, 
+		{all_pids(), 
+		 [{par, Par}, {my_sid, MySid}]};
+	    'I' ->
+		{[], 
+		 [{par, Tail}]};
+	    'H' ->
+		{[], 
+		 [{par, Tail}]};
+	    'D' ->
+		[MySid, TSid | Par] = Tail, 
+		{[get_pid_by_sid(TSid)], 
+		 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
+	    'E' ->
+		[MySid, TSid | Par] = Tail, 
+		{[get_pid_by_sid(MySid), get_pid_by_sid(TSid)], 
+		 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
+	    'F' ->
+		[MySid | Par] = Tail,
+		{all_pids(), 
+		 [{par, Par}, {my_sid, MySid}]}
+	end,
+    %% {value,{par,Params}} = lists:keysearch(par, 1, Args),
+    case client_command(H, Cmd, [{data, Data}|Args], Pids, State) of
+	true ->
+	    some_reason_not_to_do_default_action;
+	false -> %% do default
+	    lists:foreach(
+	      fun(Pid) ->
+		      gen_fsm:send_event(Pid, {send_to_socket, Data})
+	      end, Pids)
+    end.
+
 
 client_command(Header, Command, Args, _Pids, State) ->
     Res =
