@@ -7,7 +7,7 @@
 -export([code_reload/1]).
 -export([parse_inf/1]).
 
--export([broadcast/1, send_to_pid/2, error_to_pid/2]).
+-export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2]).
 
 -include("eadc.hrl").
 
@@ -88,6 +88,11 @@ parse_inf(Inf) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comunication functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+send_to_pids(Pids, Param) when is_list(Pids) ->
+    lists:foreach(fun(Pid) ->
+			  send_to_pid(Pid, Param)
+		  end, Pids).
 
 send_to_pid(Pid, {list, List}) when is_list(List) ->
     {string, String} = eadc_utils:convert({list, List}),
