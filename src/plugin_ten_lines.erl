@@ -24,7 +24,7 @@ chat_msg(Args) ->
     ?GET_VAL(msg, Msg), ?GET_VAL(sid, Sid),
     ?GET_VAL(pid, _Pid), ?GET_VAL(nick, Nick),
     ets:insert(plugin_ten_lines, {time(), Sid, Msg, Nick}),
-    false.
+    Args.
 
 user_login(Args) ->
     ?GET_VAL(pid, Pid),
@@ -35,4 +35,4 @@ user_login(Args) ->
 		      lists:concat([Acc, "-", Nick, " писал: ", Msg, "\n"])
 	      end, "Последние сообщения хаба:\n", plugin_ten_lines),
     eadc_utils:send_to_pid(Pid, {args, ["ISTA", "000", Msgs]}),
-    false.
+    Args.

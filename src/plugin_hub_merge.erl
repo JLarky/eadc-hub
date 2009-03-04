@@ -24,20 +24,20 @@ user_login(Args) ->
 					"TTBMSG\s%[mySID]\s+help\\s\n", "CT1"]}),
     ?SEND_TO_NODES({command, 'new_client', [{inf, Inf}, {pid, Pid}]}), 
     ?DEBUG(debug, "user_l: ~w~n", [{Sid,Pid}]),
-    false.
+    Args.
 
 chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
     ?GET_VAL(msg, Msg),
     ?GET_VAL(sid, Sid),
     ?SEND_TO_NODES({command, chat_msg, [{msg, Msg}, {sid, Sid}]}),
-    false.
+    Args.
 
 user_quit(Args) ->
     ?GET_VAL(msg, Msg),
     ?SEND_TO_NODES({command, 'user_quit', [{msg, Msg}]}), 
     ?DEBUG(debug, "User quit ~s", [Msg]),
-    false.
+    Args.
 
 master_command(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
@@ -51,7 +51,7 @@ master_command(Args) ->
 	user_quit ->
 	    m_user_quit(Arg)
     end,
-    false.
+    Args.
 
 m_chat_msg(Args) ->
     ?GET_VAL(msg, Msg),

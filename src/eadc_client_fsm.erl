@@ -126,19 +126,14 @@ init([]) ->
 		    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
 		    New_State=State#state{inf=Inf, nick=Nick},
 		    Other_clients = all_pids(), %% важно, что перед операцией записи
-		    Args=[{sid,SID},{pid,My_Pid}, {nick, Nick}, {inf, Inf}],
-		    case eadc_plugin:hook(user_login, Args) of
-			true ->
-			    plugin_interupt;
-			false ->
-			    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
-			    lists:foreach(fun(Pid) ->
-						  gen_fsm:send_event(Pid, {new_client, My_Pid})
-					  end, Other_clients),
-			    lists:foreach(fun(Pid) ->
-						  gen_fsm:send_event(Pid, {send_to_socket, Inf})
-					  end, [self()|Other_clients])
-		    end,		    
+		    Args=[{pids,Other_clients},{data,Data},{sid,SID},{pid,My_Pid},
+			  {nick, Nick}, {inf, Inf}],
+		    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
+		    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
+		    lists:foreach(fun(Pid) ->
+					  gen_fsm:send_event(Pid, {new_client, My_Pid})
+				  end, Pids_to_inform),
+		    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
 		    %% gen_fsm:send_event(My_Pid, {send_to_socket, "IGPA A\n"})
 		    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT}
 	    end;
@@ -322,19 +317,11 @@ handle_command(H, Cmd, Tail, Data, State) ->
 		{all_pids(), 
 		 [{par, Par}, {my_sid, MySid}]}
 	end,
-    %% {value,{par,Params}} = lists:keysearch(par, 1, Args),
-    case client_command(H, Cmd, [{data, Data}|Args], Pids, State) of
-	true ->
-	    some_reason_not_to_do_default_action;
-	false -> %% do default
-	    lists:foreach(
-	      fun(Pid) ->
-		      gen_fsm:send_event(Pid, {send_to_socket, Data})
-	      end, Pids)
-    end.
-
+    {New_Pids, New_Data} = client_command(H, Cmd, [{data, Data}|Args], Pids, State),
+    eadc_utils:send_to_pids(New_Pids, New_Data).
 
 client_command(Header, Command, Args, Pids, State) ->
+    Data=get_val(data, Args),
     Res =
 	case {Header,Command} of 
 	    {'B','MSG'} ->
@@ -342,7 +329,8 @@ client_command(Header, Command, Args, Pids, State) ->
 		Nick=State#state.nick,
 		Sid=list_to_atom(get_val(my_sid, Args)),
 		?DEBUG(debug, "client_command: chat_msg hook", []),
-		eadc_plugin:hook(chat_msg, [{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick}]);
+		Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},{data, Data},{pids,Pids}],
+		eadc_plugin:hook(chat_msg, Params);
 	    {'D','CTM'} ->
 		[Pid] = Pids,
 		case is_pid(Pid) of
@@ -350,13 +338,14 @@ client_command(Header, Command, Args, Pids, State) ->
 			Args=get_val(par, Args),
 			Sid=list_to_atom(get_val(my_sid, Args)),
 			?DEBUG(debug, "client_command: chat_msg hook ~w", [Pids]),
-			eadc_plugin:hook(ctm, [{pid,self()},{args,Args},{sid,Sid}]);
+			eadc_plugin:hook(ctm, [{pid,self()},{args,Args},{sid,Sid},
+					       {data,Data},{pids,Pids}]);
 		    false ->
 			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
-			true %% в том смысле что прерываем мы дальнейший ход команды
+			{[], Data} %% в том смысле что никому ничего мы теперь не пошлём
 		end;
 	    {_place, _holder} ->
-		false
+		{Pids, Data}
 	end,
     %%?DEBUG(debug, "client_command: ~w", [{Header, Command, Args, Pids, State}]),
     Res.

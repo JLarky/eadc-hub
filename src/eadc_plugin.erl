@@ -12,22 +12,25 @@
 %%%------------------------------------------------------------------------
 
 hook(Hook, Args) -> %% применяем все плагины
-    lists:any(      %% если кто-то вернёт true то прерываемся  
-      fun(Plugin) ->
-	      A= case (catch Plugin:Hook(Args)) of
-		     {'EXIT',{undef,_}} ->
-			 false;
+    %% если кто-то вернёт true то прерываемся  
+    F=fun(Plugin, Acc_Args) ->
+	      A= case (catch Plugin:Hook(Acc_Args)) of
+		     {'EXIT',{undef,[{Plugin, Hook, _}|_]}} ->
+			 Acc_Args; %% don't change pids and data
 		     {'EXIT', Error} ->
 			 ?DEBUG(error, "Error in module ~s with hook ~s - ~w",
 				[Plugin, Hook, Error]),
-			 false;
-		     Other ->
-			 Other
+			 Acc_Args; %% don't change pids and data
+		     New_Args ->
+			 New_Args
 		 end,
 	      ?DEBUG(debug, "~s:~s\n~w\n", [Plugin, Hook, A]),
 	      A
-      end, get_plugins()).
-
+      end,    
+    New_Args=lists:foldl(F, Args, get_plugins()),
+    {value,{data, Data}} = lists:keysearch(data, 1, New_Args),
+    {value,{pids, Pids}} = lists:keysearch(pids, 1, New_Args),
+    {Pids, Data}.
 
 get_plugins() ->
     ?PLUGINS.
