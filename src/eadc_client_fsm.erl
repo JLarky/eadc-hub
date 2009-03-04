@@ -126,7 +126,7 @@ init([]) ->
 		    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
 		    New_State=State#state{inf=Inf, nick=Nick},
 		    Other_clients = all_pids(), %% важно, что перед операцией записи
-		    Args=[{pids,Other_clients},{data,Data},{sid,SID},{pid,My_Pid},
+		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},
 			  {nick, Nick}, {inf, Inf}],
 		    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
 		    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
