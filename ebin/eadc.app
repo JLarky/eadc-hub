@@ -1,7 +1,7 @@
 {application, eadc,
  [
   {description, "ADC-HUB writing in erlang"},
-  {vsn, "0.1"},
+  {vsn, "0.2"},
   {id, "eadc"},
   {modules,      [eadc_listener, eadc_client_fsm, eadc_utils, eadc_plugin]},
   {registered,   [tcp_server_sup, tcp_listener]},
