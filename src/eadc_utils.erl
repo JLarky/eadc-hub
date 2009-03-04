@@ -7,7 +7,7 @@
 -export([code_reload/1]).
 -export([parse_inf/1]).
 
--export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2]).
+-export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2]).
 
 -include("eadc.hrl").
 
@@ -114,3 +114,5 @@ broadcast(F) when is_function(F) ->
 
 error_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "100", Message]}).
+info_to_pid(Pid, Message) ->
+    send_to_pid(Pid, {args, ["ISTA", "000", Message]}).
