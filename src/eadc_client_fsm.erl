@@ -166,7 +166,7 @@ init([]) ->
 	    case Res of
 		{'EXIT', Error} ->
 		    Msg_to_send= lists:flatten(io_lib:format("Error: ~w",[Error])),
-		    eadc_utils:send_to_pid(self(), {args, ["ISTA", "000", Msg_to_send]});
+		    eadc_utils:error_to_pid(self(), Msg_to_send);
 		_ -> everything_is_fine
 	    end,
 	    ?DEBUG(debug, "command result ~w\n", [Res]);    
@@ -334,7 +334,7 @@ handle_command(H, Cmd, Tail, Data, State) ->
     end.
 
 
-client_command(Header, Command, Args, _Pids, State) ->
+client_command(Header, Command, Args, Pids, State) ->
     Res =
 	case {Header,Command} of 
 	    {'B','MSG'} ->
@@ -343,6 +343,18 @@ client_command(Header, Command, Args, _Pids, State) ->
 		Sid=list_to_atom(get_val(my_sid, Args)),
 		?DEBUG(debug, "client_command: chat_msg hook", []),
 		eadc_plugin:hook(chat_msg, [{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick}]);
+	    {'D','CTM'} ->
+		[Pid] = Pids,
+		case is_pid(Pid) of
+		    true ->
+			Args=get_val(par, Args),
+			Sid=list_to_atom(get_val(my_sid, Args)),
+			?DEBUG(debug, "client_command: chat_msg hook ~w", [Pids]),
+			eadc_plugin:hook(ctm, [{pid,self()},{args,Args},{sid,Sid}]);
+		    false ->
+			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
+			true %% в том смысле что прерываем мы дальнейший ход команды
+		end;
 	    {_place, _holder} ->
 		false
 	end,

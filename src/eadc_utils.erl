@@ -7,7 +7,7 @@
 -export([code_reload/1]).
 -export([parse_inf/1]).
 
--export([broadcast/1, send_to_pid/2]).
+-export([broadcast/1, send_to_pid/2, error_to_pid/2]).
 
 -include("eadc.hrl").
 
@@ -102,3 +102,10 @@ broadcast({string,String}) when is_list(String) ->
     broadcast(fun(Client) -> send_to_pid(Client, String) end);
 broadcast(F) when is_function(F) ->
     lists:foreach(F, eadc_client_fsm:all_pids()).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% messaging functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+error_to_pid(Pid, Message) ->
+    send_to_pid(Pid, {args, ["ISTA", "100", Message]}).
