@@ -10,7 +10,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--record(state, {
+-record(m_state, {
 	  listener,       % Listening socket
 	  acceptor,       % Asynchronous acceptor's internal reference
 	  module          % FSM handling module
@@ -42,7 +42,7 @@ start_link() ->
 %% @end
 %%----------------------------------------------------------------------
 init(_Args) ->
-    {ok, #state{module=1}}.
+    {ok, #m_state{module=1}}.
 
 %%-------------------------------------------------------------------------
 %% @spec (Request, From, State) -> {reply, Reply, State}          |
@@ -110,7 +110,7 @@ handle_info(Info, State) ->
 %% @private
 %%-------------------------------------------------------------------------
 terminate(_Reason, State) ->
-    gen_tcp:close(State#state.listener),
+    gen_tcp:close(State#m_state.listener),
     ok.
 
 %%-------------------------------------------------------------------------

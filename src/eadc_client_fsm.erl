@@ -253,7 +253,7 @@ handle_info(_Info, StateName, StateData) ->
 %% Returns: any
 %% @private
 %%-------------------------------------------------------------------------
-terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}) ->
+terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
     (catch ets:delete(eadc_clients, Sid)),
     String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
