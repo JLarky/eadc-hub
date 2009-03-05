@@ -118,7 +118,7 @@ init([]) ->
 		    New_State=State#state{inf=Inf, nick=Nick},
 		    Other_clients = all_pids(), %% важно, что перед операцией записи
 		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},
-			  {nick, Nick}, {inf, Inf}],
+			  {nick, Nick}, {inf, Inf}, {state,State}],
 		    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
 		    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
 		    lists:foreach(fun(Pid) ->
@@ -260,7 +260,8 @@ terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}) ->
     lists:foreach(fun(Pid) ->
 			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
 		  end, all_pids()),
-    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{pids,[]},{data,[]}]),
+    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{pids,[]},
+				 {data,[]},{state, State}]),
     (catch gen_tcp:send(Socket, String_to_send)),
     (catch gen_tcp:close(Socket)),
     ok.
@@ -323,7 +324,8 @@ client_command(Header, Command, Args, Pids, State) ->
 		Nick=State#state.nick,
 		Sid=list_to_atom(get_val(my_sid, Args)),
 		?DEBUG(debug, "client_command: chat_msg hook", []),
-		Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},{data, Data},{pids,Pids}],
+		Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},{data, Data},
+			{pids,Pids},{state, State}],
 		eadc_plugin:hook(chat_msg, Params);
 	    {'D','CTM'} ->
 		[Pid] = Pids,
