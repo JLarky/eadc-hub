@@ -215,6 +215,9 @@ handle_event(Event, StateName, StateData) ->
 %%          {stop, Reason, Reply, NewStateData}
 %% @private
 %%-------------------------------------------------------------------------
+handle_sync_event(get_state, From, StateName, StateData) ->
+    gen_fsm:reply(From, StateData),
+    {next_state, StateName, StateData};
 handle_sync_event(Event, _From, StateName, StateData) ->
     {stop, {StateName, undefined_event, Event}, StateData}.
 
