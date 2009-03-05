@@ -13,6 +13,15 @@
 				       end
 				   end).
 
+-record(state, {
+	  socket,    % client socket
+	  addr,      % client address
+	  sid,       % client's SID
+	  inf,       % INF string to send to other clients
+	  buf,       % buffer for client messages sended in several tcp pockets
+	  nick
+	 }).
+
 -record(client, {
 	  sid, %% SID
 	  pid, %% PID

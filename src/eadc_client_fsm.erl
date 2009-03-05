@@ -17,15 +17,6 @@
 	 'NORMAL STAGE'/2
 	]).
 
--record(state, {
-	  socket,    % client socket
-	  addr,      % client address
-	  sid,       % client's SID
-	  inf,       % INF string to send to other clients
-	  buf,       % buffer for client messages sended in several tcp pockets
-	  nick
-	 }).
-
 %% HELPING FUNCTIONS
 -export([all_pids/0]).
 
