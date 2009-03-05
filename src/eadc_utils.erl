@@ -1,7 +1,7 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([convert/1, quote/1, cuteol/1]).
+-export([convert/1, quote/1, unquote/1, cuteol/1]).
 -export([random_base32/1, base32/1]).
 
 -export([code_reload/1]).
@@ -52,6 +52,23 @@ quote(String) ->
 				      _ ->
 					  Acc++[Char]
 				  end end, [], String).
+
+unquote(String) ->
+    {Buf, U_String} =
+	lists:foldl(
+	  fun(Char, {Prev, Acc}) -> case {Prev, Char} of
+					{$\\,$\\} ->
+					    {[], Acc++"\\"};
+					{$\\,$s} ->
+					    {[], Acc++" "};
+					{$\\,$n} ->
+					    {[], Acc++"\n"};
+					{[], Char} ->
+					    {Char, Acc};
+					_ ->
+					    {Char, lists:append(Acc,[Prev])}
+				    end end, {[],[]}, String),
+    lists:append(U_String, [Buf]).
 
 random_base32(Count) ->
     random_base32(Count, []).
