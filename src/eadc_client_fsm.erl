@@ -342,7 +342,7 @@ client_command(Header, Command, Args, Pids, State) ->
 			Sid=list_to_atom(get_val(my_sid, Args)),
 			?DEBUG(debug, "client_command: chat_msg hook ~w", [Pids]),
 			eadc_plugin:hook(ctm, [{pid,self()},{args,Args2},{sid,Sid},
-					       {data,Data},{pids,Pids}]);
+					       {data,Data},{pids,Pids},{state, State}]);
 		    false ->
 			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
 			{[], Data} %% в том смысле что никому ничего мы теперь не пошлём
