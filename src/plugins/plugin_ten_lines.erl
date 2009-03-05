@@ -23,13 +23,18 @@ chat_msg(Args) ->
     ?ETS_CHECK,
     ?GET_VAL(msg, Msg), ?GET_VAL(sid, Sid),
     ?GET_VAL(pid, _Pid), ?GET_VAL(nick, Nick),
-    [{ten_lines, [_|Tail]=Msgs}]= ets:lookup(plugin_ten_lines, ten_lines),
-    if length(Msgs) > 10 ->
-	    Old_Msgs=Tail;
-       true ->
-	    Old_Msgs=Msgs
+    New_Msg=[{time(), Sid, eadc_utils:unquote(Msg), Nick}],
+    case ets:lookup(plugin_ten_lines, ten_lines) of
+	[{ten_lines, [_|Tail]=Msgs}] ->
+	    if length(Msgs) > 10 ->
+		    Old_Msgs=Tail;
+	       true ->
+		    Old_Msgs=Msgs
+	    end,
+	    New_Msgs=Old_Msgs++New_Msg;
+	[] ->
+	    New_Msgs=New_Msg
     end,
-    New_Msgs=Old_Msgs++[{time(), Sid, eadc_utils:unquote(Msg), Nick}],
     ets:insert(plugin_ten_lines, {ten_lines, New_Msgs}),
     Args.
 
