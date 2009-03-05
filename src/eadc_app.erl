@@ -24,6 +24,7 @@ start_client() ->
 %%----------------------------------------------------------------------
 start(_Type, _Args) ->
     ets:new(eadc_clients, [set, named_table, public,{keypos,2}]),
+    eadc_plugin:hook(init, [{pids,[]},{data,[]}]),
     ListenPort = list_to_integer(get_app_env(listen_port, integer_to_list(?DEF_PORT))),
     supervisor:start_link({local, ?MODULE}, ?MODULE, {eadc_sup, ListenPort, eadc_client_fsm}).
 
