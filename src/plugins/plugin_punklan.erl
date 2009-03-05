@@ -19,9 +19,9 @@ ctm(Args) ->
     eadc_utils:info_to_pid(self(), "Ты только что попробовал приконнектится"),
 
     %% if we want see Erlang term in chat we have do like that
-    %%Out=[1,2,3,{1,2,3}], 
-    %%Test=lists:flatten(io_lib:format("~w", [Out])),
-    %%eadc_utils:error_to_pid(self(), Test),
+    Out=Args, 
+    Test=lists:flatten(io_lib:format("~w", [Out])),
+    eadc_utils:error_to_pid(self(), Test),
 
     %% YOU ALWAYS MAST DO THAT
     Args.
