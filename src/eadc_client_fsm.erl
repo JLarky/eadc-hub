@@ -112,7 +112,7 @@ init([]) ->
 		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
 		    My_Pid=self(), Sid = list_to_atom(SID),
 		    {I1,I2,I3,I4} = Addr,
-		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4])]),
+		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD"]),
 		    P_Inf=eadc_utils:parse_inf(Inf),
 		    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
 		    New_State=State#state{inf=Inf, nick=Nick},
