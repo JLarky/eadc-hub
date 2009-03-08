@@ -42,12 +42,20 @@ user_login(Args) ->
     ?GET_VAL(pid, Pid),
     ?DEBUG(debug, "~w: user_login ~w", [?MODULE, Pid]),
     ?ETS_CHECK,
-    [{ten_lines, Msgs}]= ets:lookup(plugin_ten_lines, ten_lines),
-    Ten_lines = lists:foldl(fun({_Time, _Sid, Msg, Nick}, Acc) ->
-				    lists:concat([Acc, "-", Nick, " писал: ", Msg, "\n"])
-			    end, "Последние сообщения хаба:\n", Msgs),
-    eadc_utils:info_to_pid(self(), Ten_lines),
-    Args.
+
+    case catch ets:lookup(plugin_ten_lines, ten_lines) of
+	{'Exit', _} -> %% беда
+	    Args;
+	[{ten_lines, Msgs}] ->
+	    Ten_lines = lists:foldl(fun({_Time, _Sid, Msg, Nick}, Acc) ->
+					    lists:concat([Acc, "-", Nick, " писал: ", Msg, "\n"])
+				    end, "Последние сообщения хаба:\n", Msgs),
+	    eadc_utils:info_to_pid(self(), Ten_lines),
+	    Args;
+	_ -> %% тоже беда
+	    Args
+    end.
+
 
 init(Args) ->
     ?ETS_CHECK,

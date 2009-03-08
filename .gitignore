@@ -5,3 +5,4 @@ ebin/erl_crash.dump
 ebin/*.beam
 ebin/*.boot
 ebin/*.script
+error.log

@@ -21,7 +21,7 @@
 -export([all_pids/0]).
 
 %% DEBUG
--export([test/1, get_sid_by_pid/1]).
+-export([test/1, get_sid_by_pid/1,get_unical_cid/1]).
 
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").
@@ -112,15 +112,22 @@ init([]) ->
 		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
 		    My_Pid=self(), Sid = list_to_atom(SID),
 		    {I1,I2,I3,I4} = Addr,
-		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD"]),
-		    P_Inf=eadc_utils:parse_inf(Inf),
-		    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
+		    P_Inf=eadc_utils:parse_inf(Data),
+		    Nick=case lists:keysearch('NI', 1, P_Inf) of
+			     {value,{'NI', Nick_}} -> Nick_;
+			     _ -> "[Unknown]"++eadc_utils:random_base32(5)
+			 end,		
+		    {value,{'ID', Cid_f}}  = lists:keysearch('ID', 1, P_Inf),
+		    Cid=get_unical_cid(Cid_f),
+
+		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD","ID"++Cid, "NI"++Nick]),
+
 		    New_State=State#state{inf=Inf, nick=Nick},
 		    Other_clients = all_pids(), %% важно, что перед операцией записи
 		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},
 			  {nick, Nick}, {inf, Inf}, {state,State}],
 		    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
-		    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
+		    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid}),
 		    lists:foreach(fun(Pid) ->
 					  gen_fsm:send_event(Pid, {new_client, My_Pid})
 				  end, Pids_to_inform),
@@ -354,7 +361,6 @@ client_command(Header, Command, Args, Pids, State) ->
 get_val(Key, Args) -> 
     {value,{Key, Val}} = lists:keysearch(Key, 1, Args), Val.
 
-
 get_unical_SID() ->
     Sid = eadc_utils:random_base32(4),
     case ets:member(eadc_clients, list_to_atom(Sid)) of
@@ -372,13 +378,24 @@ get_pid_by_sid(Sid) when is_atom(Sid) ->
 get_pid_by_sid(Sid) when is_list(Sid)->
     get_pid_by_sid(list_to_atom(Sid)).
 
-
 get_sid_by_pid(Pid) when is_pid(Pid) ->
     MS=[{{client, '$1','$2'},[{'==','$2',Pid}],['$1']}],
     case ets:select(eadc_clients, MS) of
-	[] -> error;
-	[Sid] -> Sid
+	[] ->
+     error;
+	[Sid] ->
+	    Sid
     end.
+
+get_unical_cid(Cid) ->
+    List=ets:match(eadc_clients, #client{_='_', cid=Cid}),
+    case length(List) of
+	0 ->
+	    Cid;
+	_ ->
+	    get_unical_cid("AAAA"++eadc_utils:random_base32(35))
+    end.
+
 
 all_pids() ->
     List=ets:match(eadc_clients, #client{_='_', pid='$1'}),
