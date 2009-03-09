@@ -5,6 +5,7 @@
 -export([hook/2]).
 
 -define(PLUGINS, [plugin_bot, plugin_hub_merge, plugin_ten_lines,plugin_punklan]).
+
 -include("eadc.hrl").
 
 %%%------------------------------------------------------------------------

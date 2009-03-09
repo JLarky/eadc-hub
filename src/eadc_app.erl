@@ -10,6 +10,8 @@
 %% Application and Supervisor callbacks
 -export([start/2, stop/1, init/1]).
 
+-include("eadc.hrl").
+
 -define(MAX_RESTART,    5).
 -define(MAX_TIME,      60).
 -define(DEF_PORT,    4111).
@@ -23,7 +25,20 @@ start_client() ->
 %% Application behaviour callbacks
 %%----------------------------------------------------------------------
 start(_Type, _Args) ->
-    ets:new(eadc_clients, [set, named_table, public,{keypos,2}]),
+    mnesia:create_schema([node()]),
+    mnesia:start(),
+    T=client,
+    mnesia:wait_for_tables([T], 30000),
+    case lists:member(T, mnesia:system_info(tables)) of
+	true ->
+	    mnesia:clear_table(T);
+	false ->
+	    mnesia:create_table(T,
+				[{attributes, 
+				  record_info(fields, client)},
+				 {disc_copies, [node()]}])
+    end,
+    
     eadc_plugin:hook(init, [{pids,[]},{data,[]}]),
     ListenPort = list_to_integer(get_app_env(listen_port, integer_to_list(?DEF_PORT))),
     error_logger:logfile({open, 'error.log'}),
