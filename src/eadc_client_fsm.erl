@@ -188,6 +188,10 @@ init([]) ->
     ok = gen_tcp:send(Socket, lists:concat([Data, "\n"])),
     {next_state, 'NORMAL STAGE', State};
 
+'NORMAL STAGE'(kill_your_self, State) ->
+    ?DEBUG(error, "~w killed by self", [self()]),
+    {stop, normal, State};
+
 'NORMAL STAGE'(Other, State) ->
     ?DEBUG(debug, "Unknown message '~s' ~n", [Other]),
     {next_state, 'NORMAL STAGE', State}.

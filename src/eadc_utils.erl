@@ -7,7 +7,7 @@
 -export([code_reload/1]).
 -export([parse_inf/1]).
 
--export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2]).
+-export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2, redirect_to/3]).
 
 -include("eadc.hrl").
 
@@ -136,3 +136,14 @@ error_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "100", Message]}).
 info_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "000", Message]}).
+
+
+redirect_to(Pid, Sid, Hub) ->
+    R_msg="You are redirected to dchub://jlarky.punklan.net",
+    eadc_utils:info_to_pid(Pid, R_msg),
+    SID= if
+	     is_atom(Sid) -> atom_to_list(Sid);
+	     is_list(Sid) -> Sid
+	 end,
+    eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RDdchub://jlarky.punklan.net", "MS"++R_msg]}),
+    gen_fsm:send_event(Pid, kill_your_self).
