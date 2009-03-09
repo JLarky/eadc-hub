@@ -1,6 +1,5 @@
 
 -define(DEBUG(Type, Format, Data), begin
-				       %%io:format("\npid ~w:", [self()]),
 				       case Type of
 					   debug ->
 					       %%error_logger:info_msg(Format, Data);

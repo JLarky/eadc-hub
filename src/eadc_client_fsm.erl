@@ -116,12 +116,12 @@ init([]) ->
 		    Nick=case lists:keysearch('NI', 1, P_Inf) of
 			     {value,{'NI', Nick_}} -> Nick_;
 			     _ -> "[Unknown]"++eadc_utils:random_base32(5)
-			 end,		
-		    {value,{'ID', Cid_f}}  = lists:keysearch('ID', 1, P_Inf),
+			 end,    
+		    {value,{'ID', Cid_f}} = lists:keysearch('ID', 1, P_Inf),
 		    Cid=get_unical_cid(Cid_f),
-
+		    
 		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD","ID"++Cid, "NI"++Nick]),
-
+		    
 		    New_State=State#state{inf=Inf, nick=Nick},
 		    Other_clients = all_pids(),
 		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},
@@ -388,7 +388,6 @@ get_pid_by_sid(Sid) when is_atom(Sid) ->
 
 get_pid_by_sid(Sid) when is_list(Sid)->
     get_pid_by_sid(list_to_atom(Sid)).
-
 
 get_unical_cid(Cid) ->
     MatchHead = #client{cid='$1', _='_'},Guard = [{'==', '$1', Cid}],Result = '$1',
