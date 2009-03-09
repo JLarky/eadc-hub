@@ -28,7 +28,7 @@ start(_Type, _Args) ->
     mnesia:create_schema([node()]),
     mnesia:start(),
     T=client,
-    mnesia:wait_for_tables([T], 30000),
+    mnesia:wait_for_tables([T], 10000),
     case lists:member(T, mnesia:system_info(tables)) of
 	true ->
 	    mnesia:clear_table(T);
