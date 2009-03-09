@@ -20,8 +20,9 @@ chat_msg(Args) ->
 	    case Tail of
 		_ ->
 		    ?GET_VAL(state, State),
-		    #state{nick=Nick, addr=Addr}=State,
-		    Place=whois(Addr)
+		    #state{nick=Nick, addr=Addr, sid=Sid}=State,
+		    Place=whois(Addr),
+		    eadc_utils:redirect_to(self(), Sid, "")
 	    end,
 	    Place_m =  case Place of
 			   inet -> "интернетах. Осторожно! трафик!";
