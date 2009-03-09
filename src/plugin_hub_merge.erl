@@ -19,9 +19,6 @@ user_login(Args) ->
     ?GET_VAL(sid, Sid),
     ?GET_VAL(pid, Pid),
     ?GET_VAL(inf, Inf),
-    %% ICMD Luadch\sCommands\\General\\Help TTBMSG\s%[mySID]\s+help\\s\n CT1
-    eadc_utils:send_to_pid(Pid, {args, ["ICMD", "Commands\\General\\Help",
-					"TTBMSG\s%[mySID]\s!help\\s\n", "CT1"]}),
     ?SEND_TO_NODES({command, 'new_client', [{inf, Inf}, {pid, Pid}]}), 
     ?DEBUG(debug, "user_l: ~w~n", [{Sid,Pid}]),
     Args.

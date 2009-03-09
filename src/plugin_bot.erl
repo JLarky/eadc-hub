@@ -7,11 +7,11 @@
 -include("eadc_plugin.hrl").
 
 user_login(Args) ->
-    {value,{pid,Pid}} = lists:keysearch(pid, 1, Args),
-    {string, String1} = eadc_utils:convert({args, ["IINF", "CT32", "VEJLarky's hub", "NIADC-hub", "DEБот"]}),
-    {string, String2} = eadc_utils:convert({args, ["ISTA", "000", "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."]}),
-    gen_fsm:send_event(Pid, {send_to_socket, String1}),
-    gen_fsm:send_event(Pid, {send_to_socket, String2}),
+    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
+					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
+
+    eadc_utils:send_to_pid(self(), {args, ["IINF", "CT32", "VEJLarky's hub", "NIADC-hub", "DEБот"]}),
+    eadc_utils:info_to_pid(self(), "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
     Args.
 
 chat_msg(Args) ->
