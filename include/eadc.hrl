@@ -3,7 +3,8 @@
 				       io:format("\npid ~w:", [self()]),
 				       case Type of
 					   debug ->
-					       error_logger:info_msg(Format, Data);
+					       %%error_logger:info_msg(Format, Data);
+					       ok;
 					   info ->
 					       error_logger:info_msg(Format, Data);
 					   error ->
