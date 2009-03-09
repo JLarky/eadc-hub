@@ -9,7 +9,7 @@
 user_login(Args) ->
     {value,{pid,Pid}} = lists:keysearch(pid, 1, Args),
     {string, String1} = eadc_utils:convert({args, ["IINF", "CT32", "VEJLarky's hub", "NIADC-hub", "DEБот"]}),
-    {string, String2} = eadc_utils:convert({args, ["ISTA", "000", "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub"]}),
+    {string, String2} = eadc_utils:convert({args, ["ISTA", "000", "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub. Так как этот хаб ещё не стабилен, не забывайте про dchub://jlarky.punklan.net"]}),
     gen_fsm:send_event(Pid, {send_to_socket, String1}),
     gen_fsm:send_event(Pid, {send_to_socket, String2}),
     Args.
