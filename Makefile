@@ -29,3 +29,4 @@ boot: all
 clean:
 	$(RM) ebin/*.beam ebin/*.boot ebin/*.script ebin/*crash.dump \
 	ebin/*~ src/*~
+	$(RM) -r ebin/Mnesia*

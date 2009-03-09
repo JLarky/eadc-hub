@@ -71,6 +71,9 @@ unquote(String) ->
     lists:append(U_String, [Buf]).
 
 random_base32(Count) ->
+    {A,B,C}=time(), 
+    {D,E,F}=random:seed(),
+    random:seed(A+D+erlang:crc32(pid_to_list(self())),B+E, C+F),
     random_base32(Count, []).
 random_base32(0, Output) ->
     Output;

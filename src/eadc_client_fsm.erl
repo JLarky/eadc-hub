@@ -21,7 +21,7 @@
 -export([all_pids/0]).
 
 %% DEBUG
--export([test/1, get_sid_by_pid/1]).
+-export([test/1, get_pid_by_sid/1, get_unical_cid/1,get_unical_SID/0]).
 
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").
@@ -112,15 +112,22 @@ init([]) ->
 		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
 		    My_Pid=self(), Sid = list_to_atom(SID),
 		    {I1,I2,I3,I4} = Addr,
-		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD"]),
-		    P_Inf=eadc_utils:parse_inf(Inf),
-		    {value,{'NI', Nick}} = lists:keysearch('NI', 1, P_Inf),
+		    P_Inf=eadc_utils:parse_inf(Data),
+		    Nick=case lists:keysearch('NI', 1, P_Inf) of
+			     {value,{'NI', Nick_}} -> Nick_;
+			     _ -> "[Unknown]"++eadc_utils:random_base32(5)
+			 end,    
+		    {value,{'ID', Cid_f}} = lists:keysearch('ID', 1, P_Inf),
+		    Cid=get_unical_cid(Cid_f),
+		    
+		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD","ID"++Cid, "NI"++Nick]),
+		    
 		    New_State=State#state{inf=Inf, nick=Nick},
-		    Other_clients = all_pids(), %% важно, что перед операцией записи
+		    Other_clients = all_pids(),
 		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},
-			  {nick, Nick}, {inf, Inf}, {state,State}],
+			  {nick, Nick}, {inf, Inf}, {state,New_State}],
 		    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
-		    ets:insert(eadc_clients, #client{pid=My_Pid, sid=Sid, nick=Nick}),
+		    clients_insert(#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid}),
 		    lists:foreach(fun(Pid) ->
 					  gen_fsm:send_event(Pid, {new_client, My_Pid})
 				  end, Pids_to_inform),
@@ -143,7 +150,7 @@ init([]) ->
 
 
 'NORMAL STAGE'({data, Data}, #state{socket=Socket} = State) ->
-    ?DEBUG(debug, "DATA recived '~s'~n", [Data]),
+    ?DEBUG(error, "DATA recived '~s'~n", [Data]),
     {list, Message}=eadc_utils:convert({string, Data}),
     case Message of
 	[[Header|Command_name]|Tail] ->
@@ -255,7 +262,7 @@ handle_info(_Info, StateName, StateData) ->
 %%-------------------------------------------------------------------------
 terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
-    (catch ets:delete(eadc_clients, Sid)),
+    (catch client_delete(Sid)),
     String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
     lists:foreach(fun(Pid) ->
 			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
@@ -333,7 +340,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		    true ->
 			Args2=get_val(par, Args),
 			Sid=list_to_atom(get_val(my_sid, Args)),
-			?DEBUG(debug, "client_command: chat_msg hook ~w", [Pids]),
+			?DEBUG(debud, "client_command: ctm hook ~w", [Pids]),
 			eadc_plugin:hook(ctm, [{pid,self()},{args,Args2},{sid,Sid},
 					       {data,Data},{pids,Pids},{state, State}]);
 		    false ->
@@ -356,33 +363,57 @@ get_val(Key, Args) ->
 
 
 get_unical_SID() ->
-    Sid = eadc_utils:random_base32(4),
-    case ets:member(eadc_clients, list_to_atom(Sid)) of
-	true -> get_unical_SID();
-	_    -> Sid
+    Sid=eadc_utils:random_base32(4),
+    MatchHead = #client{sid='$1', _='_'},Guard = [{'==', '$1', Sid}],Result = '$1',
+    F = fun() ->
+		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
+	end,
+    case catch mnesia:transaction(F) of
+	{atomic, []} -> %% not used SID
+	    Sid;
+	{atomic, [_|_]} -> %% CID allready in use, generate new
+	    get_unical_SID();
+	Error -> {error, Error} 
     end.
 
 get_pid_by_sid(Sid) when is_atom(Sid) ->
-    case ets:lookup(eadc_clients, Sid) of
-	[] ->
-	    error;
-	[Client] ->
-	    Client#client.pid
+    MatchHead = #client{sid='$1', pid='$2', _='_'},Guard = [{'==', '$1', Sid}],Result = '$2',
+    F = fun() ->
+		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
+	end,
+    case catch mnesia:transaction(F) of
+	{atomic, [Pid]} -> %% list must contain one pid
+	    Pid;
+	Error -> {error, Error} 
     end;
+
 get_pid_by_sid(Sid) when is_list(Sid)->
     get_pid_by_sid(list_to_atom(Sid)).
 
-
-get_sid_by_pid(Pid) when is_pid(Pid) ->
-    MS=[{{client, '$1','$2'},[{'==','$2',Pid}],['$1']}],
-    case ets:select(eadc_clients, MS) of
-	[] -> error;
-	[Sid] -> Sid
+get_unical_cid(Cid) ->
+    MatchHead = #client{cid='$1', _='_'},Guard = [{'==', '$1', Cid}],Result = '$1',
+    F = fun() ->
+		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
+	end,
+    case catch mnesia:transaction(F) of
+	{atomic, []} -> %% not used CID
+	    Cid;
+	{atomic, [_|_]} -> %% CID allready in use, generate new
+	    get_unical_cid("CIDINUSE"++eadc_utils:random_base32(31));
+	Error -> {error, Error} 
     end.
 
+
 all_pids() ->
-    List=ets:match(eadc_clients, #client{_='_', pid='$1'}),
-    lists:map(fun([Pid]) -> Pid end, List).
+    MatchHead = #client{pid='$1', _='_'},Guard = [],Result = '$1',
+    F = fun() ->
+		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
+	end,
+    case catch mnesia:transaction(F) of
+	{atomic, Pids} -> Pids;
+	_Error -> []
+    end.
+
 
 
 test(String) ->
@@ -407,3 +438,16 @@ inf_update(Inf, Inf_update) ->
 	  end, [], lists:reverse(Inf_list)),
     {string, New_Inf} = eadc_utils:convert({list, ["BINF", Sid | New_Inf_list]}),
     New_Inf.
+
+
+
+clients_insert(Client) when is_record(Client, client) ->
+    F = fun() ->
+		mnesia:write(client, Client, write)
+	end,
+    mnesia:transaction(F).
+
+client_delete(Sid) ->
+    mnesia:transaction(fun() ->
+			       mnesia:delete({client, Sid})
+		       end).
