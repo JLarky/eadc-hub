@@ -365,7 +365,6 @@ client_command(Header, Command, Args, Pids, State) ->
 get_val(Key, Args) -> 
     {value,{Key, Val}} = lists:keysearch(Key, 1, Args), Val.
 
-
 get_unical_SID() ->
     Sid=eadc_utils:random_base32(4),
     MatchHead = #client{sid='$1', _='_'},Guard = [{'==', '$1', Sid}],Result = '$1',
