@@ -2,12 +2,14 @@
 -author('jlarky@gmail.com').
 
 -export([convert/1, quote/1, unquote/1, cuteol/1]).
--export([random_base32/1, base32/1]).
+-export([random_base32/1, base32/1, base32_encode/1,
+	unbase32/1, base32_decode/1]).
 
 -export([code_reload/1]).
 -export([parse_inf/1]).
 
--export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2, redirect_to/3]).
+-export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
+	 redirect_to/3]).
 
 -include("eadc.hrl").
 
@@ -80,14 +82,39 @@ random_base32(0, Output) ->
 random_base32(Count, Output) ->
     random_base32(Count-1, Output)++base32(random:uniform(32)-1).
 
-
-base32(V) ->
+base32(V) when V < 32->
     if
 	V < 0 -> error;
 	V < 26 -> [V+65];
 	V > 25 -> [V+24]; % V-26+48+2
 	true -> V
-    end.
+    end;
+base32(V) ->
+    base32(V bsr 5)++base32(V rem 32).
+
+base32_encode(String) ->
+    base32(lists:foldl(fun(Char, Acc) ->
+			       Acc*256+Char
+		       end, 0, String)).
+
+unbase32([V]) when ((V>64) and (V <91)) or ((V > 49) and (V < 56)) ->
+    if
+	V < 56 -> V-24;
+	V > 64 -> V-65
+    end;
+unbase32(String) ->
+    lists:foldl(fun(Char, Acc) ->
+			Acc*32+unbase32([Char])
+		end, 0, String).
+
+base32_decode(String) ->
+    Int=unbase32(String),
+    Out=base32_decode_(Int, _Out=[]).
+
+base32_decode_(0, Out) ->
+    Out;
+base32_decode_(Int, Out) ->
+    base32_decode_(Int div 256, [Int rem 256 | Out]).
 
 code_reload(Module) ->
     error_logger:info_msg("~s", [os:cmd("cd .. && make")]),
