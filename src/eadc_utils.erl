@@ -93,9 +93,16 @@ base32(V) ->
     base32(V bsr 5)++base32(V rem 32).
 
 base32_encode(String) ->
+    Shift=case length(String) rem 5 of % some black magic
+	      0 -> 0;
+	      1 -> 2;
+	      2 -> 4;
+	      3 -> 1;
+	      4 -> 3
+	  end,
     base32(lists:foldl(fun(Char, Acc) ->
 			       Acc*256+Char
-		       end, 0, String)).
+		       end, 0, String) bsl Shift).
 
 unbase32([V]) when ((V>64) and (V <91)) or ((V > 49) and (V < 56)) ->
     if
@@ -108,8 +115,22 @@ unbase32(String) ->
 		end, 0, String).
 
 base32_decode(String) ->
-    Int=unbase32(String),
-    Out=base32_decode_(Int, _Out=[]).
+    Shift=case length(String) rem 8 of % more black magic then in base32_encode
+	      0 -> 0;
+	      1 -> 3;
+	      2 -> 6;
+	      3 -> 1;
+	      4 -> 4;
+	      5 -> 7;
+	      6 -> 2;
+	      7 -> 5
+	  end,
+    Int=unbase32(String) bsl Shift,
+    Out=base32_decode_(Int, _Out=[]),
+    case Shift of %% and black magic again
+	0 -> Out;
+	_ -> lists:sublist(Out, length(Out)-1)
+    end.
 
 base32_decode_(0, Out) ->
     Out;
