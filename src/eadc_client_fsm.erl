@@ -110,15 +110,24 @@ init([]) ->
 		    {stop, normal, State};	    
 		true ->
 		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
-		    My_Pid=self(), Sid = list_to_atom(SID),
-		    {I1,I2,I3,I4} = Addr,
+		    My_Pid=self(), {I1,I2,I3,I4} = Addr,
 		    P_Inf=eadc_utils:parse_inf(Data),
-		    Nick=case lists:keysearch('NI', 1, P_Inf) of
-			     {value,{'NI', Nick_}} -> Nick_;
-			     _ -> "[Unknown]"++eadc_utils:random_base32(5)
-			 end,    
-		    {value,{'ID', Cid_f}} = lists:keysearch('ID', 1, P_Inf),
+
+		    PID=eadc_utils:get_required_field('PD', P_Inf),
+		    Nick=eadc_utils:get_required_field('NI', P_Inf),
+		    Cid_f=eadc_utils:get_required_field('ID', P_Inf),
 		    Cid=get_unical_cid(Cid_f),
+
+		    case eadc_utils:base32_encode(tiger:hash(eadc_utils:base32_decode(PID))) of
+			Cid ->
+			    ok;
+			WRONGCID ->
+			    eadc_utils:broadcast(fun(Pid_to_inform) ->
+							 eadc_utils:info_to_pid(Pid_to_inform,
+										lists:concat(["User '", Nick, "' has wrong CID. Be aware"]))
+						 end),
+			    eadc_utils:info_to_pid(self(), "Your CID isn't corresponding to PID. You are cheater.")
+		    end,
 		    
 		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD","ID"++Cid, "NI"++Nick]),
 		    
