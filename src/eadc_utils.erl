@@ -6,7 +6,7 @@
 	unbase32/1, base32_decode/1]).
 
 -export([code_reload/1]).
--export([parse_inf/1]).
+-export([parse_inf/1, get_required_field/2]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
 	 redirect_to/3]).
@@ -195,3 +195,14 @@ redirect_to(Pid, Sid, Hub) ->
 	 end,
     eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RDdchub://jlarky.punklan.net", "MS"++R_msg]}),
     gen_fsm:send_event(Pid, kill_your_self).
+
+get_required_field(Key, PInf) ->
+    case (catch lists:keysearch(Key, 1, PInf)) of
+	{value,{Key, Val}} ->
+	    Val;
+	Not_found_or_error ->
+	    ?DEBUG(error, "~w not fount required_field ~w: ~w", [self(), Key, Not_found_or_error]),
+	    error_to_pid(self(), lists:concat(["Required field ", Key, " not found"])),
+	    gen_fsm:send_event(self(), kill_your_self)
+    end.
+

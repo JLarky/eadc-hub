@@ -42,6 +42,8 @@ start(_Type, _Args) ->
     error_logger:logfile({open, 'error.log'}),
     error_logger:tty(false),
     eadc_plugin:hook(init, [{pids,[]},{data,[]}]),
+    tiger:start(),
+
     ListenPort = list_to_integer(get_app_env(listen_port, integer_to_list(?DEF_PORT))),
     supervisor:start_link({local, ?MODULE}, ?MODULE, {eadc_sup, ListenPort, eadc_client_fsm}).
 
