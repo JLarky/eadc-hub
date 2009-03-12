@@ -1,6 +1,14 @@
-Чтобы устоновить выполните
+To install do:
 make
 make boot
 
-Чтобы запустить
+To start hub do
 ./EADC
+
+And check it on adc://localhost:4111
+
+
+Troubleshooting:
+
+If you got "error: erl_driver.h: No such file or directory" when run make.
+Do "locate erl_driver.h" and then "sudo ln -s /usr/local/lib/erlang/usr/include/erl_driver.h /usr/include/erl_driver.h" replace /usr/local/lib/erlang/usr/include/erl_driver.h to path of erl_driver.h in your system
