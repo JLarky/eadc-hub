@@ -125,27 +125,26 @@ unbase32(String) ->
 		end, 0, String).
 
 base32_decode(String) ->
-    Shift=case length(String) rem 8 of % more black magic then in base32_encode
-	      0 -> 0;
-	      1 -> 3;
-	      2 -> 6;
-	      3 -> 1;
-	      4 -> 4;
-	      5 -> 7;
-	      6 -> 2;
-	      7 -> 5
-	  end,
-    Int=unbase32(String) bsl Shift,
-    Out=base32_decode_(Int, _Out=[]),
-    case Shift of %% and black magic again
-	0 -> Out;
-	_ -> lists:sublist(Out, length(Out)-1)
-    end.
+    Bits=lists:foldl(fun(Elem, Acc) ->
+			     A= unbase32([Elem]),
+			     New= <<Acc/bitstring, A:5>>,
+			     New
+		     end, <<>>, String),
+    base32_decode_(Bits, _Out=[]).
 
-base32_decode_(0, Out) ->
+base32_decode_(<<>>, Out) ->
     Out;
-base32_decode_(Int, Out) ->
-    base32_decode_(Int div 256, [Int rem 256 | Out]).
+base32_decode_(Bits, Out) ->
+    case Bits of
+	<<Head:8, Rest/bitstring>> ->
+	    base32_decode_(Rest, Out++[Head]);
+	<<0:1>> -> Out;  %% if you ask me why 1,2,3,4,6
+	<<0:2>> -> Out;  %% I DON'T KNOW!
+	<<0:3>> -> Out;
+	<<0:4>> -> Out;
+	<<H:6>> ->
+	    Out++[H bsl 2]
+    end.
 
 code_reload(Module) ->
     error_logger:info_msg("~s", [os:cmd("cd .. && make")]),
