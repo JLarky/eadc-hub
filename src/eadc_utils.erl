@@ -92,17 +92,27 @@ base32(V) when V < 32->
 base32(V) ->
     base32(V bsr 5)++base32(V rem 32).
 
+
 base32_encode(String) ->
-    Shift=case length(String) rem 5 of % some black magic
-	      0 -> 0;
-	      1 -> 2;
-	      2 -> 4;
-	      3 -> 1;
-	      4 -> 3
-	  end,
-    base32(lists:foldl(fun(Char, Acc) ->
-			       Acc*256+Char
-		       end, 0, String) bsl Shift).
+    base32_encode_(list_to_binary(String), _Out=[]).
+
+base32_encode_(Bin, Out) ->
+    case Bin of
+	<<>> ->
+	    Out;
+	<<A:1>> ->
+	    Out++base32(A bsl 4);
+	<<A:2>> ->
+	    Out++base32(A bsl 3);
+	<<A:3>> ->
+	    Out++base32(A bsl 2);
+	<<A:4>> ->
+	    Out++base32(A bsl 1);
+	Bin ->
+	    <<A:5, T/bitstring>>=Bin,
+	    base32_encode_(T, Out++base32(A))
+    end.
+
 
 unbase32([V]) when ((V>64) and (V <91)) or ((V > 49) and (V < 56)) ->
     if

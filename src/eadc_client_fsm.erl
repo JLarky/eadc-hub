@@ -263,7 +263,8 @@ handle_info({tcp_closed, Socket}, _StateName,
 handle_info({master, Data}, StateName, StateData) ->
     ?MODULE:StateName({master, Data}, StateData);
 
-handle_info(_Info, StateName, StateData) ->
+handle_info(Info, StateName, StateData) ->
+    ?DEBUG(error, "Unknown info ~w\n", [Info]),
     {noreply, StateName, StateData}.
 
 
