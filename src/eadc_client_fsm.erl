@@ -163,18 +163,29 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
-'VERIFY STAGE'({data, Data}, #state{nick=Nick, addr=Addr, cid=Cid, random=Random, sid=Sid, afterverify=Func, triesleft=Tries_left}=State) ->
+'VERIFY STAGE'({data, Data}, #state{nick=Nick, addr=Addr, cid=Cid, random=Random, sid=_Sid, afterverify=Func, triesleft=Tries_left}=State) ->
     case eadc_utils:convert({string, Data}) of
 	{list, ["HPAS", Pass]} ->
-	    {pass, User_Pass} = eadc_utils:account_get_pass(Nick, Cid),
+	    {login, Login}=eadc_utils:account_get_login(Nick, Cid),
+	    Account=eadc_utils:account_get(Login),
+	    User_Pass = Account#account.pass,
 	    A=User_Pass++Random,
 	    B=tiger:hash(A),
 	    C=eadc_utils:base32_encode(B),
 	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", [Nick,Addr,{Pass,C}]),
 	    case C==Pass of
 		true ->
-		    Func(),
-		    {next_state, 'NORMAL STAGE', State};
+		    Func(), %% user_login
+		    if (Account#account.class > 2) ->
+			    Inf_update=["CT4"];
+		       true ->
+			    Inf_update=["CT2"]
+		    end,
+		    New_Inf_full=inf_update(State#state.inf, Inf_update),
+		    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
+
+		    eadc_utils:broadcast({string, New_Inf_to_send}), 
+		    {next_state, 'NORMAL STAGE', State#state{inf=New_Inf_full, login=Login}};
 		false ->
 		    case (catch Tries_left-1) of
 			I when is_integer(I) and (I > 0) ->
@@ -183,7 +194,7 @@ init([]) ->
 			    New_Random=tiger:hash(eadc_utils:random_base32(39)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(New_Random)]}),
 			    {next_state, 'VERIFY STAGE', State#state{random=New_Random, triesleft=I}, ?TIMEOUT};
-			Other ->
+			_Other ->
 			    {stop, normal, State}
 		    end
 	    end;
@@ -401,6 +412,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		New_Inf_full=inf_update(State#state.inf, Inf_update),
 		gen_fsm:send_event(self(), {inf_update, New_Inf_full}),
 		New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
+
 		{Pids, New_Inf_to_send};
 	    {'D','CTM'} ->
 		[Pid] = Pids,
