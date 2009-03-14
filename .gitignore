@@ -7,3 +7,4 @@ ebin/*.boot
 ebin/*.script
 error.log
 Mnesia*
+priv/*.so
