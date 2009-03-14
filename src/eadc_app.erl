@@ -38,6 +38,13 @@ start(_Type, _Args) ->
 				  record_info(fields, client)},
 				 {disc_copies, [node()]}])
     end,
+    case lists:member(account, mnesia:system_info(tables)) of
+	true -> ok;
+	false -> mnesia:create_table(account,
+				     [{attributes,
+				       record_info(fields, account)},
+				      {disc_copies, [node()]}])
+    end,
     
     error_logger:logfile({open, 'error.log'}),
     error_logger:tty(false),

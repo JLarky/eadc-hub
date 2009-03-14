@@ -12,8 +12,9 @@
 %% FSM States
 -export([
 	 'WAIT_FOR_SOCKET'/2,
-	 'IDENTIFY STAGE'/2,
 	 'PROTOCOL STAGE'/2,
+	 'IDENTIFY STAGE'/2,
+	 'VERIFY STAGE'/2,
 	 'NORMAL STAGE'/2
 	]).
 
@@ -81,7 +82,7 @@ init([]) ->
     {next_state, 'WAIT_FOR_SOCKET', State}.
 
 'PROTOCOL STAGE'({data, Data}, #state{socket=Socket} = State) ->
-    ?DEBUG(debug, "Data recived '~s'~n", [Data]),
+    ?DEBUG(debug, "Data recived in PROTOCOL '~s'~n", [Data]),
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
 	    {A,B,C}=time(), random:seed(A,B,C),
@@ -100,7 +101,7 @@ init([]) ->
     {stop, normal, State}.
 
 'IDENTIFY STAGE'({data, Data}, #state{socket=Socket, addr=Addr, sid=Sid}=State) ->
-    ?DEBUG(debug, "String recived '~s'~n", [Data]),
+    ?DEBUG(debug, "String recived in IDENTIFY '~s'~n", [Data]),
     {list, List} = eadc_utils:convert({string, Data}),
     case List of
 	["BINF", SID | _] ->
@@ -124,25 +125,29 @@ init([]) ->
 			WRONGCID ->
 			    eadc_utils:broadcast(fun(Pid_to_inform) ->
 							 eadc_utils:info_to_pid(Pid_to_inform,
-										lists:concat(["User '", Nick, "' has wrong CID. Be aware"]))
+										lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
 						 end),
 			    eadc_utils:info_to_pid(self(), "Your CID isn't corresponding to PID. You are cheater.")
 		    end,
 		    
 		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD","ID"++Cid, "NI"++Nick]),
-		    
-		    New_State=State#state{inf=Inf, nick=Nick},
+		    New_State=State#state{inf=Inf, nick=Nick, cid=Cid, sid=Sid},
+
 		    Other_clients = all_pids(),
 		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},
 			  {nick, Nick}, {inf, Inf}, {state,New_State}],
-		    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
-		    clients_insert(#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid}),
-		    lists:foreach(fun(Pid) ->
-					  gen_fsm:send_event(Pid, {new_client, My_Pid})
-				  end, Pids_to_inform),
-		    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
-		    %% gen_fsm:send_event(My_Pid, {send_to_socket, "IGPA A\n"})
-		    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT}
+
+		    case need_authority(Nick, Cid) of
+			true ->
+			    Random=tiger:hash(eadc_utils:random_base32(39)),
+			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
+			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,
+									 afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
+			false ->
+			    user_login(Sid,Nick,Cid,Args),
+			    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT}
+		    end
+			    
 	    end;
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -150,16 +155,55 @@ init([]) ->
     end;
 
 'IDENTIFY STAGE'({send_to_socket, Data}, State) ->
-    'NORMAL STAGE'({send_to_socket, Data}, State);
+    send_to_socket(Data, State),
+    {next_state, 'IDENTIFY STAGE', State};
 
 'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
     ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout\n"),
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
+'VERIFY STAGE'({data, Data}, #state{nick=Nick, addr=Addr, cid=Cid, random=Random, sid=Sid, afterverify=Func, triesleft=Tries_left}=State) ->
+    case eadc_utils:convert({string, Data}) of
+	{list, ["HPAS", Pass]} ->
+	    {pass, User_Pass} = eadc_utils:account_get_pass(Nick, Cid),
+	    A=User_Pass++Random,
+	    B=tiger:hash(A),
+	    C=eadc_utils:base32_encode(B),
+	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", [Nick,Addr,{Pass,C}]),
+	    case C==Pass of
+		true ->
+		    Func(),
+		    {next_state, 'NORMAL STAGE', State};
+		false ->
+		    case (catch Tries_left-1) of
+			I when is_integer(I) and (I > 0) ->
+			    timer:sleep(1000),
+			    eadc_utils:send_to_pid(self(), {args, ["ISTA", "123", "Wrong password"]}),
+			    New_Random=tiger:hash(eadc_utils:random_base32(39)),
+			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(New_Random)]}),
+			    {next_state, 'VERIFY STAGE', State#state{random=New_Random, triesleft=I}, ?TIMEOUT};
+			Other ->
+			    {stop, normal, State}
+		    end
+	    end;
+	_ ->
+	    ?DEBUG(debug, "DATA recived in VERIFY '~s'~n", [Data]),
+	    {next_state, 'VERIFY STAGE', State, ?TIMEOUT}
+    end;
+
+'VERIFY STAGE'({send_to_socket, Data}, State) ->
+    send_to_socket(Data, State),
+    {next_state, 'VERIFY STAGE', State};
+
+'VERIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
+    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout\n"),
+    error_logger:info_msg("Client '~w' timed out\n", [self()]),
+    {stop, normal, State}.
+
 
 'NORMAL STAGE'({data, Data}, #state{socket=Socket} = State) ->
-    ?DEBUG(error, "DATA recived '~s'~n", [Data]),
+    ?DEBUG(debug, "DATA recived in NORMAL '~s'~n", [Data]),
     {list, Message}=eadc_utils:convert({string, Data}),
     case Message of
 	[[Header|Command_name]|Tail] ->
@@ -192,9 +236,8 @@ init([]) ->
     gen_fsm:send_event(Pid, {send_to_socket, BINF}),
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'({send_to_socket, Data}, #state{socket=Socket} = State) ->
-    ?DEBUG(debug, "send_to_socket event '~s'~n", [Data]),
-    ok = gen_tcp:send(Socket, lists:concat([Data, "\n"])),
+'NORMAL STAGE'({send_to_socket, Data}, State) ->
+    send_to_socket(Data, State),
     {next_state, 'NORMAL STAGE', State};
 
 'NORMAL STAGE'(kill_your_self, State) ->
@@ -350,8 +393,8 @@ client_command(Header, Command, Args, Pids, State) ->
 		Nick=State#state.nick,
 		Sid=list_to_atom(get_val(my_sid, Args)),
 		?DEBUG(debug, "client_command: chat_msg hook", []),
-		Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},{data, Data},
-			{pids,Pids},{state, State}],
+		Params=[{pid,self()},{msg,eadc_utils:unquote(Msg)},{sid,Sid},{nick,Nick},
+			{data, Data},{pids,Pids},{state, State}],
 		eadc_plugin:hook(chat_msg, Params);
 	    {'D','CTM'} ->
 		[Pid] = Pids,
@@ -378,7 +421,7 @@ client_command(Header, Command, Args, Pids, State) ->
 %%%------------------------------------------------------------------------
 
 get_val(Key, Args) -> 
-    {value,{Key, Val}} = lists:keysearch(Key, 1, Args), Val.
+    eadc_utils:get_val(Key, Args).
 
 get_unical_SID() ->
     Sid=eadc_utils:random_base32(4),
@@ -457,6 +500,29 @@ inf_update(Inf, Inf_update) ->
     {string, New_Inf} = eadc_utils:convert({list, ["BINF", Sid | New_Inf_list]}),
     New_Inf.
 
+user_login(Sid,Nick,Cid,Args) ->
+    My_Pid=self(),
+    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
+    clients_insert(#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid}),
+    lists:foreach(fun(Pid) ->
+			  gen_fsm:send_event(Pid, {new_client, My_Pid})
+		  end, Pids_to_inform),
+    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send).
+
+need_authority(Nick, Cid) ->
+    MatchHead = #account{cid='$1', nick='$2', _='_'},
+    Guard = [{'or',{'==','$2',Nick},{'==','$1',Cid}}], Result = '$2',
+    F = fun() ->
+		mnesia:select(account,[{MatchHead, Guard, [Result]}])
+	end,
+    A=(catch mnesia:transaction(F)),
+    io:format("!!! ~w\n", [A]),
+    case A of
+	{atomic, [_|_]} -> %% not used SID
+	    true;
+	_ ->
+	    false
+    end.
 
 
 clients_insert(Client) when is_record(Client, client) ->
@@ -469,3 +535,7 @@ client_delete(Sid) ->
     mnesia:transaction(fun() ->
 			       mnesia:delete({client, Sid})
 		       end).
+
+send_to_socket(Data, #state{socket=Socket}) ->
+    ?DEBUG(debug, "send_to_socket event '~s'~n", [Data]),
+    ok = gen_tcp:send(Socket, lists:concat([Data, "\n"])).
