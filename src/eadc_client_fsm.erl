@@ -396,6 +396,11 @@ client_command(Header, Command, Args, Pids, State) ->
 		Params=[{pid,self()},{msg,eadc_utils:unquote(Msg)},{sid,Sid},{nick,Nick},
 			{data, Data},{pids,Pids},{state, State}],
 		eadc_plugin:hook(chat_msg, Params);
+	    {'B','INF'} ->
+		Inf_update=get_val(par, Args),
+		?DEBUG(error, "!!! ~w", [Inf_update]),
+		gen_fsm:send_event(self(), {inf_update, Inf_update}),
+		{Pids, Data};
 	    {'D','CTM'} ->
 		[Pid] = Pids,
 		case is_pid(Pid) of
@@ -483,22 +488,22 @@ test(String) ->
 
 
 inf_update(Inf, Inf_update) ->
-    {list, [_binf, Sid | Inf_list]} = eadc_utils:convert({string, Inf}),
-    New_Inf_list=
-	lists:foldl(
-	  fun(Cur_Inf_Elem, Inf_Acc) ->
-		  Updated_Inf_Elem = 
-		      lists:foldl(
-			fun(Cur_Upd_Elem, Inf_Elem_Acc) -> 
-				case lists:prefix(lists:sublist(Cur_Upd_Elem, 2), Inf_Elem_Acc) of
-				    true -> Cur_Upd_Elem;
-				    false -> Inf_Elem_Acc
-				end
-			end, Cur_Inf_Elem, Inf_update),
-		  [Updated_Inf_Elem|Inf_Acc]
-	  end, [], lists:reverse(Inf_list)),
-    {string, New_Inf} = eadc_utils:convert({list, ["BINF", Sid | New_Inf_list]}),
-    New_Inf.
+    [$B,$I,$N,$F,$\ |Inf_to_parse]=Inf,
+    Parsed_Inf=eadc_utils:parse_inf(Inf_to_parse),
+    New_Inf=
+	lists:foldl(fun([A1,A2|Cur_update], Acc) ->
+			    Key=list_to_atom([A1,A2]),
+			    case get_val(Key, Parsed_Inf) of
+				'NO KEY' ->
+				    Acc++[{Key,Cur_update}];
+				_ ->
+				    case Cur_update of
+				    [] -> lists:keydelete(Key, 1, Acc);
+					_  -> eadc_utils:set_val(Key, Cur_update, Acc)
+				    end
+			    end
+		    end, Parsed_Inf, Inf_update),
+    "BINF"++eadc_utils:deparse_inf(New_Inf).
 
 user_login(Sid,Nick,Cid,Args) ->
     My_Pid=self(),
