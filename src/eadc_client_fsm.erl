@@ -224,11 +224,7 @@ init([]) ->
     end,
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'({inf_update, Inf_update}, #state{inf=Inf} = State) ->
-    ?DEBUG(debug, "BINF Update '~w'~n", [Inf_update]),
-    ?DEBUG(debug, "Old BINF '~s'~n", [Inf]),
-    New_Inf=inf_update(Inf, Inf_update),
-    ?DEBUG(debug, "New BINF '~s'~n", [New_Inf]),
+'NORMAL STAGE'({inf_update, New_Inf}, State) ->
     {next_state, 'NORMAL STAGE', State#state{inf=New_Inf}};
 
 'NORMAL STAGE'({new_client, Pid}, #state{inf=BINF} = State) ->
@@ -397,10 +393,15 @@ client_command(Header, Command, Args, Pids, State) ->
 			{data, Data},{pids,Pids},{state, State}],
 		eadc_plugin:hook(chat_msg, Params);
 	    {'B','INF'} ->
-		Inf_update=get_val(par, Args),
-		?DEBUG(error, "!!! ~w", [Inf_update]),
-		gen_fsm:send_event(self(), {inf_update, Inf_update}),
-		{Pids, Data};
+		%% user not allow to change his CT or ID
+		Inf_update=lists:filter(fun(A) -> 
+						not (lists:prefix("CT", A) or
+						     lists:prefix("ID", A))
+					end, get_val(par, Args)),
+		New_Inf_full=inf_update(State#state.inf, Inf_update),
+		gen_fsm:send_event(self(), {inf_update, New_Inf_full}),
+		New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
+		{Pids, New_Inf_to_send};
 	    {'D','CTM'} ->
 		[Pid] = Pids,
 		case is_pid(Pid) of
