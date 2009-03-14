@@ -32,7 +32,11 @@ do_command([Command|Args], State) ->
     case Command of
 	"help" ->
 	    Hlp="All hub commands:
-!help - for show this help",
+!help - show this help
+!regme <password> - register new user with password <password>'
+!regclass <user> <class> - change users's class to <class>
+
+For now all commands not require any privileges. Enjoy.",
 	    eadc_utils:info_to_pid(self(), Hlp);
 	"regnewuser" ->
 	    [UserName,Pass|_]=Args,
@@ -42,12 +46,17 @@ do_command([Command|Args], State) ->
 	    [Pass|_]=Args,UserName=State#state.nick,
 	    {atomic, ok}=eadc_utils:account_new(#account{login=UserName, nick=UserName,pass=Pass}),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Password of user ~s was set to '~s'", [UserName, Pass])));
+	"regclass" ->
+	    [Login, Class|_]=Args,
+	    Account=eadc_utils:account_get(Login),
+	    {atomic, ok}=eadc_utils:account_new(Account#account{class=list_to_integer(Class)}),
+	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Class of user ~s was set to '~s'", [Login, Class])));
 	"userlist" ->
 	    List=eadc_utils:account_list(),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p", [List])));
 	_ ->
 	    io:format("~s", [Command]),
-	    eadc_utils:info_to_pid(self(), "неопознаная комманда =)"),
+	    eadc_utils:info_to_pid(self(), "Unknown command"),
 	    Out=Command,
 	    Test=lists:flatten(io_lib:format("~w", [Out])),
 	    eadc_utils:error_to_pid(self(), Test)

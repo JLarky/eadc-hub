@@ -11,7 +11,7 @@
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
 	 redirect_to/3]).
 
--export([account_new/1, account_list/0, account_get_pass/2]).
+-export([account_new/1, account_list/0, account_get/1, account_get_login/2]).
 
 -include("eadc.hrl").
 
@@ -251,25 +251,33 @@ account_new(Account) when is_record(Account, account)->
     mnesia:transaction(F).
 
 account_list() ->
-    MatchHead = #account{nick='$1', pass='$2',_='_'},Guard = [],Result = [['$1','$2']],
-    F = fun() ->
-		mnesia:select(account,[{MatchHead, Guard, Result}])	
+    F = fun()->
+		mnesia:match_object(#account{_='_'})
 	end,
-    case catch mnesia:transaction(F) of
-	{atomic, List} -> List;
-	Error -> Error
+    mnesia:transaction(F).
+
+account_get(Login) ->
+    F = fun()->
+		mnesia:match_object(#account{login=Login,_='_'})
+	end,
+
+    case (catch mnesia:transaction(F)) of
+	{atomic, [Account]} ->
+	    Account#account{};
+	_ ->
+	    false
     end.
 
-account_get_pass(Nick, Cid) ->
-    MatchHead = #account{cid='$1', nick='$2', _='_', pass='$3'},
+account_get_login(Nick, Cid) ->
+    MatchHead = #account{cid='$1', nick='$2', _='_', login='$3'},
     Guard = [{'or',{'==','$2',Nick},{'==','$1',Cid}}], Result = '$3',
     F = fun() ->
 		mnesia:select(account,[{MatchHead, Guard, [Result]}])
 	end,
     A=(catch mnesia:transaction(F)),
     case A of
-	{atomic, [Pass]} -> %% not used SID
-	    {pass, Pass};
+	{atomic, [Log]} ->
+	    {login, Log};
 	_ ->
 	    false
     end.
