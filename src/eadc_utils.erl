@@ -6,7 +6,7 @@
 	unbase32/1, base32_decode/1]).
 
 -export([code_reload/1]).
--export([parse_inf/1, get_required_field/2, get_val/2]).
+-export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, set_val/3]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
 	 redirect_to/3]).
@@ -164,6 +164,11 @@ parse_inf(Inf) ->
 		      {list_to_atom([H1,H2]), T}
 	      end, List).
 
+deparse_inf(Parsed_Inf) ->
+    lists:foldl(fun({Key, Val}, Acc) ->
+			lists:concat([Acc," ",Key,Val])
+		end, "", Parsed_Inf).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comunication functions
@@ -219,7 +224,14 @@ get_required_field(Key, PInf) ->
     end.
 
 get_val(Key, Args) -> 
-    {value,{Key, Val}} = lists:keysearch(Key, 1, Args), Val.
+    case lists:keysearch(Key, 1, Args) of
+	{value,{Key, Val}} -> Val;
+	_ -> 'NO KEY'
+    end.
+
+set_val(Key, Val, Args) -> 
+    lists:keyreplace(Key, 1, Args, {Key, Val}).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% account functions
