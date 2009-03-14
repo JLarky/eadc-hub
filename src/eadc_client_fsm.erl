@@ -260,6 +260,11 @@ handle_info({tcp_closed, Socket}, _StateName,
     error_logger:info_msg("~p Client ~p disconnected.\n", [self(), Addr]),
     {stop, normal, StateData};
 
+handle_info({tcp_error,Socket,etimedout}, _StateName,
+            #state{socket=Socket, addr=Addr} = StateData) ->
+    error_logger:info_msg("~p Client ~p connection timeout.\n", [self(), Addr]),
+    {stop, normal, StateData};
+
 handle_info({master, Data}, StateName, StateData) ->
     ?MODULE:StateName({master, Data}, StateData);
 
