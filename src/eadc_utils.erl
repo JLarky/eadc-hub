@@ -140,17 +140,24 @@ base32_decode_(Bits, Out) ->
     case Bits of
 	<<Head:8, Rest/bitstring>> ->
 	    base32_decode_(Rest, Out++[Head]);
-	<<0:1>> -> Out;  %% if you ask me why 1,2,3,4,6
-	<<0:2>> -> Out;  %% I DON'T KNOW!
+	<<0:1>> -> Out;
+	<<0:2>> -> Out;
 	<<0:3>> -> Out;
 	<<0:4>> -> Out;
+	<<0:5>> -> Out;
+	<<0:6>> -> Out;
+	<<0:7>> -> Out;
+	<<H:1>> -> Out++[H bsl 7];
+	<<H:2>> -> Out++[H bsl 6];
 	<<H:3>> -> Out++[H bsl 5];
+	<<H:4>> -> Out++[H bsl 4];
 	<<H:5>> -> Out++[H bsl 3];
-	<<H:6>> -> Out++[H bsl 2]
+	<<H:6>> -> Out++[H bsl 2];
+	<<H:7>> -> Out++[H bsl 1]
     end.
 
 code_reload(Module) ->
-    error_logger:info_msg("~s", [os:cmd("cd .. && make")]),
+    io:format("~s\n", [os:cmd("cd .. && make")]),
     true = code:soft_purge(Module),
     code:load_file(Module).
 
