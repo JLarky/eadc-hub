@@ -17,9 +17,13 @@
 	  socket,    % client socket
 	  addr,      % client address
 	  sid,       % client's SID
+	  cid,       % client's CID
 	  inf,       % INF string to send to other clients
 	  buf,       % buffer for client messages sended in several tcp pockets
-	  nick
+	  nick,
+	  random,    % random string that hub send to user
+	  triesleft, % amount of tries before hub kicks user
+	  afterverify % contain function that must be executed after entering pass
 	 }).
 
 -record(client, {
@@ -28,3 +32,11 @@
 	  nick,
 	  cid
 	  }).
+
+-record(account, {
+	  login,
+	  pass,
+	  level,
+	  nick,
+	  cid,
+	  info}).

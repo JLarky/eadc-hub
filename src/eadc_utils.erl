@@ -6,10 +6,12 @@
 	unbase32/1, base32_decode/1]).
 
 -export([code_reload/1]).
--export([parse_inf/1, get_required_field/2]).
+-export([parse_inf/1, get_required_field/2, get_val/2]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
 	 redirect_to/3]).
+
+-export([account_new/1, account_list/0, account_get_pass/2]).
 
 -include("eadc.hrl").
 
@@ -142,8 +144,9 @@ base32_decode_(Bits, Out) ->
 	<<0:2>> -> Out;  %% I DON'T KNOW!
 	<<0:3>> -> Out;
 	<<0:4>> -> Out;
-	<<H:6>> ->
-	    Out++[H bsl 2]
+	<<H:3>> -> Out++[H bsl 5];
+	<<H:5>> -> Out++[H bsl 3];
+	<<H:6>> -> Out++[H bsl 2]
     end.
 
 code_reload(Module) ->
@@ -215,3 +218,39 @@ get_required_field(Key, PInf) ->
 	    gen_fsm:send_event(self(), kill_your_self)
     end.
 
+get_val(Key, Args) -> 
+    {value,{Key, Val}} = lists:keysearch(Key, 1, Args), Val.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% account functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+account_new(Account) when is_record(Account, account)->
+    F=fun() ->
+	      mnesia:write(Account)
+      end,
+    mnesia:transaction(F).
+
+account_list() ->
+    MatchHead = #account{nick='$1', pass='$2',_='_'},Guard = [],Result = [['$1','$2']],
+    F = fun() ->
+		mnesia:select(account,[{MatchHead, Guard, Result}])	
+	end,
+    case catch mnesia:transaction(F) of
+	{atomic, List} -> List;
+	Error -> Error
+    end.
+
+account_get_pass(Nick, Cid) ->
+    MatchHead = #account{cid='$1', nick='$2', _='_', pass='$3'},
+    Guard = [{'or',{'==','$2',Nick},{'==','$1',Cid}}], Result = '$3',
+    F = fun() ->
+		mnesia:select(account,[{MatchHead, Guard, [Result]}])
+	end,
+    A=(catch mnesia:transaction(F)),
+    case A of
+	{atomic, [Pass]} -> %% not used SID
+	    {pass, Pass};
+	_ ->
+	    false
+    end.
