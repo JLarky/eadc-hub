@@ -184,7 +184,8 @@ init([]) ->
 		    New_Inf_full=inf_update(State#state.inf, Inf_update),
 		    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
 
-		    eadc_utils:broadcast({string, New_Inf_to_send}), 
+		    eadc_utils:broadcast({string, New_Inf_to_send}),
+		    set_client_login(Login),
 		    {next_state, 'NORMAL STAGE', State#state{inf=New_Inf_full, login=Login}};
 		false ->
 		    case (catch Tries_left-1) of
@@ -493,11 +494,17 @@ all_pids() ->
 	_Error -> []
     end.
 
-
+set_client_login(Login) ->
+    F=fun() ->
+	      [Client]=mnesia:match_object(#client{pid=self(),_='_'}),
+	      mnesia:write(Client#client{login=Login})
+      end,
+    {atomic, ok}=mnesia:transaction(F).
 
 test(String) ->
-    [Pid | _] =all_pids(),
-    gen_fsm:send_event(Pid, {send_to_socket, String}).
+    set_client_login(String).
+    %%[Pid | _] =all_pids(),
+    %%gen_fsm:send_event(Pid, {send_to_socket, String}).
 
 
 inf_update(Inf, Inf_update) ->
@@ -534,7 +541,6 @@ need_authority(Nick, Cid) ->
 		mnesia:select(account,[{MatchHead, Guard, [Result]}])
 	end,
     A=(catch mnesia:transaction(F)),
-    io:format("!!! ~w\n", [A]),
     case A of
 	{atomic, [_|_]} -> %% not used SID
 	    true;
