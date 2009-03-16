@@ -10,6 +10,9 @@
 %% Application and Supervisor callbacks
 -export([start/2, stop/1, init/1]).
 
+%% Utility for get configure options
+-export([get_app_env/2]).
+
 -include("eadc.hrl").
 
 -define(MAX_RESTART,    5).
@@ -28,9 +31,9 @@ start(_Type, _Args) ->
     mnesia:create_schema([node()]),
     mnesia:start(),
     T=client,
-    mnesia:wait_for_tables([T], 10000),
     case lists:member(T, mnesia:system_info(tables)) of
 	true ->
+	    mnesia:wait_for_tables([T], 10000),
 	    mnesia:clear_table(T);
 	false ->
 	    mnesia:create_table(T,
@@ -38,14 +41,9 @@ start(_Type, _Args) ->
 				  record_info(fields, client)},
 				 {disc_copies, [node()]}])
     end,
-    case lists:member(account, mnesia:system_info(tables)) of
-	true -> ok;
-	false -> mnesia:create_table(account,
-				     [{attributes,
-				       record_info(fields, account)},
-				      {disc_copies, [node()]}])
-    end,
-    
+
+    eadc_user:init(),
+
     error_logger:logfile({open, 'error.log'}),
     error_logger:tty(false),
     eadc_plugin:hook(init, [{pids,[]},{data,[]}]),
@@ -112,6 +110,19 @@ init([Module]) ->
 %% Internal functions
 %%----------------------------------------------------------------------
 get_app_env(Opt, Default) ->
+    case file:consult("eadc.cfg") of
+	{ok, Data} ->
+	    case lists:keysearch(Opt, 1, Data) of
+		{value, {Opt,Val}} ->
+		    Val;
+		_ ->
+		    get_app_env_(Opt, Default)
+	    end;
+	_ ->
+	    get_app_env_(Opt, Default)	  
+    end.
+
+get_app_env_(Opt, Default) ->
     case application:get_env(application:get_application(), Opt) of
 	{ok, Val} -> Val;
 	_ ->

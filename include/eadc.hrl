@@ -31,7 +31,8 @@
 	  sid, %% SID
 	  pid, %% PID
 	  nick,
-	  cid
+	  cid,
+	  login
 	  }).
 
 -record(account, {

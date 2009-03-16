@@ -32,28 +32,49 @@ do_command([Command|Args], State) ->
     case Command of
 	"help" ->
 	    Hlp="All hub commands:
-!help - show this help
-!regme <password> - register new user with password <password>'
-!regclass <user> <class> - change users's class to <class>
+User's commands:
+ !help - show this help
+ !regme <password> - register new user with password <password>'
+ !userlist - show all users with hidden passwords
 
-For now all commands not require any privileges. Enjoy.",
+Admin's commands:
+ !regclass <user> <class> - change users's class to <class>
+ !userlist - show all users with their's passwords
+",
 	    eadc_utils:info_to_pid(self(), Hlp);
 	"regnewuser" ->
-	    [UserName,Pass|_]=Args,
-	    Ok=eadc_utils:account_new(#account{login=UserName, nick=UserName,pass=Pass}),
-	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p", [Ok])));
+	    case eadc_user:access('reg user') of
+		true ->
+		    [UserName,Pass|_]=Args,
+		    Ok=eadc_utils:account_new(#account{login=UserName, nick=UserName,pass=Pass}),
+		    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p", [Ok])));
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
 	"regme" ->
 	    [Pass|_]=Args,UserName=State#state.nick,
 	    {atomic, ok}=eadc_utils:account_new(#account{login=UserName, nick=UserName,pass=Pass}),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Password of user ~s was set to '~s'", [UserName, Pass])));
 	"regclass" ->
-	    [Login, Class|_]=Args,
-	    Account=eadc_utils:account_get(Login),
-	    {atomic, ok}=eadc_utils:account_new(Account#account{class=list_to_integer(Class)}),
-	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Class of user ~s was set to '~s'", [Login, Class])));
+	    case eadc_user:access('reg class') of
+		true ->
+		    [Login, Class|_]=Args,
+		    Account=eadc_utils:account_get(Login),
+		    {atomic, ok}=eadc_utils:account_new(
+				   Account#account{class=list_to_integer(Class)}),
+		    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Class of user ~s was set to '~s'", [Login, Class])));
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
 	"userlist" ->
-	    List=eadc_utils:account_list(),
-	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p", [List])));
+	    {atomic, List}=eadc_utils:account_list(),
+	    case eadc_user:access('view pass') of
+		true ->
+		    New_List=List;
+		false ->
+		    New_List=lists:map(fun(A) -> A#account{pass="***"} end, List)
+	    end,
+	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Users:\n~p", [New_List])));
 	_ ->
 	    io:format("~s", [Command]),
 	    eadc_utils:info_to_pid(self(), "Unknown command"),
