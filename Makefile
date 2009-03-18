@@ -1,45 +1,53 @@
-ERLC=erlc -o ebin -I include/
+MARKDOWN_SOURCES=$(wildcard doc/*.md)
+MARKDOWN_TARGETS=$(patsubst doc/%.md,doc/html/%.html,$(MARKDOWN_SOURCES))
 
-all: ebin/eadc_client_fsm.beam ebin/eadc_listener.beam ebin/eadc_app.beam \
-	 ebin/eadc_utils.beam ebin/eadc_master.beam ebin/eadc_plugin.beam \
-	ebin/plugin_bot.beam ebin/plugin_hub_merge.beam plugins tiger \
-	ebin/eadc_user.beam
+all: ebin
+	(cd src;$(MAKE))
 
-ebin/eadc_client_fsm.beam: src/eadc_client_fsm.erl
-	$(ERLC) $^
-ebin/eadc_listener.beam: src/eadc_listener.erl
-	$(ERLC) $^
-ebin/eadc_app.beam: src/eadc_app.erl
-	$(ERLC) $^
-ebin/eadc_utils.beam: src/eadc_utils.erl
-	$(ERLC) $^
-ebin/eadc_master.beam: src/eadc_master.erl
-	$(ERLC) $^
-ebin/eadc_user.beam: src/eadc_user.erl
-	$(ERLC) $^
-ebin/eadc_plugin.beam: src/eadc_plugin.erl
-	$(ERLC) $^
-ebin/plugin_bot.beam: src/plugin_bot.erl
-	$(ERLC) $^
-ebin/plugin_hub_merge.beam: src/plugin_hub_merge.erl
-	$(ERLC) $^
-plugins:
-	$(ERLC) src/plugins/*.erl
+tiger:
+	(cd deps/tiger;$(MAKE))
+	(mkdir -p priv/)
+	(cp deps/tiger/priv/tiger_drv.so ./priv/)
 
-tiger: ebin/tiger.beam priv/tiger_drv.so
+docs: erlang-docs html-docs
 
-priv/tiger_drv.so: priv/tiger.c priv/tiger_drv.c
-	(cd priv; make)
+erlang-docs: doc/edoc
+	(cd src;$(MAKE) docs)
 
-ebin/tiger.beam: priv/tiger.erl
-	$(ERLC) $^
+html-docs: doc/html $(MARKDOWN_TARGETS)
+
+doc/edoc:
+	mkdir -p doc/edoc
+
+doc/html:
+	mkdir -p doc/html
+
+doc/html/%.html: doc/%.md
+	(title=`grep '^# ' $< | head -1 | sed -e 's:^# ::'` ;\
+	 t=/tmp/$*.md ;\
+	 sed -e "s:@TITLE@:$$title:g" < doc/header.html > $@ ;\
+	 python doc/buildtoc.py < $< > $$t ;\
+	 markdown $$t >> $@ ;\
+	 rm $$t ;\
+	 cat doc/footer.html >> $@)
+
+ebin:
+	mkdir -p ebin
+
+clean: clean-docs
+	(cd src;$(MAKE) clean)
+	(cd deps/*/; $(MAKE) clean)
+	$(RM) -r priv
+	$(RM) ebin/*.boot ebin/*.script ebin/*crash.dump ebin/*~ src/*~ priv/*~
+
+clean-docs: clean-html
+	rm -rf doc/edoc
+
+clean-html:
+	rm -rf doc/html
 
 boot: all
 	(cd ebin; echo 'systools:make_script("eadc"),erlang:halt().' | erl)
-
-clean:
-	$(RM) ebin/*.beam ebin/*.boot ebin/*.script ebin/*crash.dump \
-	ebin/*~ src/*~ priv/*~ priv/*.so priv/*.dll
 
 cleandb:
 	$(RM) -r ebin/Mnesia*

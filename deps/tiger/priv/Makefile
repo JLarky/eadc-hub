@@ -12,3 +12,5 @@ all : tiger_drv
 tiger_drv: tiger_drv.c tiger.c
 	$(CC) -o tiger_drv.so -fpic -shared tiger_drv.c tiger.c
 
+clean:
+	$(RM) tiger_drv.so tiger_drv.dll

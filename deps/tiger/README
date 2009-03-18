@@ -1,0 +1,18 @@
+Tiger Hash is now working as erlang application, so do
+
+ $ make
+
+ $ erl -pa ebin -boot start_sasl -s tiger
+ Eshell V5.6.3  (abort with ^G)
+ 1> tiger:hash("tiger").
+ [108,96,140,225,50,117,176,127,25,118,131,26,197,250,159,85,139,9,82,161,227,249,201,211]
+
+hash() take string parameter and return Tiger Hash in 24-bytes string
+
+
+
+I've tested it only in Lunux, more likely it will not work in Windows. If you can make it work there, your patches are very welcome.
+
+
+
+(c) 2009, JLarky <jlarky@gmail.com>
