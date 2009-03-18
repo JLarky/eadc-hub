@@ -1,6 +1,5 @@
 To install do:
 make
-make boot
 
 To start hub do
 ./EADC

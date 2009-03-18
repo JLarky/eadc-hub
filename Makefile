@@ -1,8 +1,12 @@
 MARKDOWN_SOURCES=$(wildcard doc/*.md)
 MARKDOWN_TARGETS=$(patsubst doc/%.md,doc/html/%.html,$(MARKDOWN_SOURCES))
 
-all: ebin
+all: eadc boot deps
+
+eadc: ebin
 	(cd src;$(MAKE))
+
+deps: tiger
 
 tiger:
 	(cd deps/tiger;$(MAKE))
@@ -46,7 +50,9 @@ clean-docs: clean-html
 clean-html:
 	rm -rf doc/html
 
-boot: all
+boot: ebin/eadc.boot
+
+ebin/eadc.boot:
 	(cd ebin; echo 'systools:make_script("eadc"),erlang:halt().' | erl)
 
 cleandb:
