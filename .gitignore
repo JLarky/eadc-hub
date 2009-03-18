@@ -5,6 +5,10 @@ ebin/erl_crash.dump
 ebin/*.beam
 ebin/*.boot
 ebin/*.script
+ebin/*.app
 error.log
 Mnesia*
 priv/*.so
+deps/*/ebin/*.beam
+deps/*/ebin/*.app
+deps/*/priv/*.so
