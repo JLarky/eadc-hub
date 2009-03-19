@@ -11,6 +11,7 @@ user_login(Args) ->
 					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
 
     eadc_utils:send_to_pid(self(), {args, ["IINF", "CT32", "VEJLarky's hub", "NIEADC-hub", "DE}{абе"]}),
+    eadc_utils:send_to_pid(self(), {args, ["IINF", "ASDF", "I40.0.0.0","CT5", "NItest-root", "DEтестовая комната"]}),
     eadc_utils:info_to_pid(self(), "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
     Args.
 
@@ -21,14 +22,15 @@ chat_msg(Args) ->
 	[$!|Command] -> %% command
 	    {ok, Params}=regexp:split(Command, " "),
 	    State=eadc_utils:get_val(state, Args),
-	    do_command(Params, State),
+	    Client=eadc_utils:get_val(client, Args),
+	    do_command(Params, State, Client),
 	    Args1=lists:keyreplace(msg, 1, Args, {msg, []}),
 	    lists:keyreplace(pids, 1, Args1, {pids, []});
 	_ -> 
 	    Args
     end.
 
-do_command([Command|Args], State) ->
+do_command([Command|Args], State, Client) ->
     case Command of
 	"help" ->
 	    Hlp="All hub commands:
@@ -52,7 +54,7 @@ Admin's commands:
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
 	"regme" ->
-	    [Pass|_]=Args,UserName=State#state.nick,
+	    [Pass|_]=Args,UserName=Client#client.nick,
 	    {atomic, ok}=eadc_utils:account_new(#account{login=UserName, nick=UserName,pass=Pass}),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Password of user ~s was set to '~s'", [UserName, Pass])));
 	"regclass" ->
