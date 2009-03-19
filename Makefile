@@ -11,7 +11,7 @@ deps: tiger
 tiger:
 	(cd deps/tiger;$(MAKE))
 	(mkdir -p priv/)
-	(cp deps/tiger/priv/tiger_drv.so ./priv/)
+	(test -f priv/tiger_drv.so || ln -s ../deps/tiger/priv/tiger_drv.so priv/tiger_drv.so)
 
 docs: erlang-docs html-docs
 

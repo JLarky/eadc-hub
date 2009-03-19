@@ -20,7 +20,8 @@ chat_msg(Args) ->
 	    case Tail of
 		_ ->
 		    ?GET_VAL(state, State),
-		    #state{nick=Nick, addr=Addr, sid=Sid}=State,
+		    ?GET_VAL(client, Client),
+		    #state{addr=Addr, sid=Sid}=State,Nick=Client#client.nick,
 		    Place=whois(Addr)
 	    end,
 	    Place_m =  case Place of
@@ -36,9 +37,11 @@ chat_msg(Args) ->
 ctm(Args) ->
     ?GET_VAL(pids, [Pid]=_Pids),
     ?GET_VAL(state, State_f),
+    ?GET_VAL(client, Client),
     State_t=gen_fsm:sync_send_all_state_event(Pid, get_state, 10000),
-    Nick_f=State_f#state.nick,
-    Nick_t=State_t#state.nick,
+    Nick_f=Client#client.nick,
+    Client_t=eadc_utils:client_get(State_t#state.sid),
+    Nick_t=Client_t#client.nick,
     Direction=lists:concat([whois(State_f#state.addr), "\\sи\\s", whois(State_t#state.addr)]),
  
     %% send message to sender

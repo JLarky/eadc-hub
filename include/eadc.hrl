@@ -15,24 +15,23 @@
 
 -record(state, {
 	  socket,    % client socket
+	  buf,       % buffer for client messages sended in several tcp pockets
 	  addr,      % client address
 	  sid,       % client's SID
-	  cid,       % client's CID
-	  inf,       % INF string to send to other clients
-	  buf,       % buffer for client messages sended in several tcp pockets
-	  nick,
 	  login,     % user login
 	  random,    % random string that hub send to user
 	  triesleft, % amount of tries before hub kicks user
-	  afterverify % contain function that must be executed after entering pass
+	  afterverify% contain function that must be executed after entering pass
 	 }).
 
 -record(client, {
-	  sid, %% SID
-	  pid, %% PID
+	  sid, %% SID. Key field
+	  pid, %% PID or {m, f, a}
+	  cid, %% client's CID
 	  nick,
-	  cid,
-	  login
+	  login,
+	  inf, %% INF string to send to other clients
+	  addr %% client address
 	  }).
 
 -record(account, {

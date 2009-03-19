@@ -130,19 +130,26 @@ init([]) ->
 			    eadc_utils:info_to_pid(self(), "Your CID isn't corresponding to PID. You are cheater.")
 		    end,
 		    
-		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),"PD","ID"++Cid, "NI"++Nick]),
-		    New_State=State#state{inf=Inf, nick=Nick, cid=Cid, sid=Sid},
+		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),
+					  "PD","ID"++Cid, "NI"++Nick]),
+
+		    Login=case eadc_utils:account_get_login(Nick, Cid) of
+			      {login, A} -> A;
+			      _ -> undefined
+			  end,
+
+		    New_State=State#state{login=Login},
 
 		    Other_clients = all_pids(),
-		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},
-			  {nick, Nick}, {inf, Inf}, {state,New_State}],
+		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},{cid, Cid},
+			  {nick, Nick}, {inf, Inf}, {addr,Addr},{state,New_State}],
 
 		    case need_authority(Nick, Cid) of
 			true ->
 			    Random=tiger:hash(eadc_utils:random_base32(39)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
-			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,
-									 afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
+			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end
+}, ?TIMEOUT};
 			false ->
 			    user_login(Sid,Nick,Cid,Args),
 			    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT}
@@ -163,30 +170,29 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
-'VERIFY STAGE'({data, Data}, #state{nick=Nick, addr=Addr, cid=Cid, random=Random, sid=_Sid, afterverify=Func, triesleft=Tries_left}=State) ->
+'VERIFY STAGE'({data, Data}, #state{addr=Addr, login=Login, random=Random, sid=_Sid, afterverify=Func, triesleft=Tries_left}=State) ->
     case eadc_utils:convert({string, Data}) of
 	{list, ["HPAS", Pass]} ->
-	    {login, Login}=eadc_utils:account_get_login(Nick, Cid),
 	    Account=eadc_utils:account_get(Login),
 	    User_Pass = Account#account.pass,
 	    A=User_Pass++Random,
 	    B=tiger:hash(A),
 	    C=eadc_utils:base32_encode(B),
-	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", [Nick,Addr,{Pass,C}]),
+	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", [Login,Addr,{Pass,C}]),
 	    case C==Pass of
 		true ->
-		    Func(), %% user_login
+		    Client=Func(), %% user_login
 		    if (Account#account.class > 2) ->
 			    Inf_update=["CT4"];
 		       true ->
 			    Inf_update=["CT2"]
 		    end,
-		    New_Inf_full=inf_update(State#state.inf, Inf_update),
+		    New_Inf_full=inf_update(Client#client.inf, Inf_update),
 		    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
 
 		    eadc_utils:broadcast({string, New_Inf_to_send}),
 		    set_client_login(Login),
-		    {next_state, 'NORMAL STAGE', State#state{inf=New_Inf_full, login=Login}};
+		    {next_state, 'NORMAL STAGE', State};
 		false ->
 		    case (catch Tries_left-1) of
 			I when is_integer(I) and (I > 0) ->
@@ -234,14 +240,6 @@ init([]) ->
 	    ?DEBUG(error, "Unknown message '~w'", [Other]),
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\serror\n")
     end,
-    {next_state, 'NORMAL STAGE', State};
-
-'NORMAL STAGE'({inf_update, New_Inf}, State) ->
-    {next_state, 'NORMAL STAGE', State#state{inf=New_Inf}};
-
-'NORMAL STAGE'({new_client, Pid}, #state{inf=BINF} = State) ->
-    ?DEBUG(debug, "new_client event from ~w \n", [Pid]),
-    gen_fsm:send_event(Pid, {send_to_socket, BINF}),
     {next_state, 'NORMAL STAGE', State};
 
 'NORMAL STAGE'({send_to_socket, Data}, State) ->
@@ -394,12 +392,14 @@ handle_command(H, Cmd, Tail, Data, State) ->
 
 client_command(Header, Command, Args, Pids, State) ->
     Data=get_val(data, Args),
+    Client=client_get(State#state.sid),
+    
     Res =
 	case {Header,Command} of 
 	    {'B','MSG'} ->
-		[Msg]=get_val(par, Args),
-		Nick=State#state.nick,
+		[Msg|_]=get_val(par, Args),
 		Sid=list_to_atom(get_val(my_sid, Args)),
+		Nick=Client#client.nick,
 		?DEBUG(debug, "client_command: chat_msg hook", []),
 		Params=[{pid,self()},{msg,eadc_utils:unquote(Msg)},{sid,Sid},{nick,Nick},
 			{data, Data},{pids,Pids},{state, State}],
@@ -410,8 +410,8 @@ client_command(Header, Command, Args, Pids, State) ->
 						not (lists:prefix("CT", A) or
 						     lists:prefix("ID", A))
 					end, get_val(par, Args)),
-		New_Inf_full=inf_update(State#state.inf, Inf_update),
-		gen_fsm:send_event(self(), {inf_update, New_Inf_full}),
+		New_Inf_full=inf_update(Client#client.inf, Inf_update),
+		client_write(Client#client{inf=New_Inf_full}),
 		New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
 
 		{Pids, New_Inf_to_send};
@@ -526,13 +526,16 @@ inf_update(Inf, Inf_update) ->
     "BINF"++eadc_utils:deparse_inf(New_Inf).
 
 user_login(Sid,Nick,Cid,Args) ->
-    My_Pid=self(),
+    My_Pid=self(),Inf=get_val(inf, Args),Login=get_val(login, Args),
     {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
-    clients_insert(#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid}),
-    lists:foreach(fun(Pid) ->
-			  gen_fsm:send_event(Pid, {new_client, My_Pid})
-		  end, Pids_to_inform),
-    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send).
+    Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, inf=Inf, login=Login},
+
+    lists:foreach(fun(#client{inf=Inf}) ->
+			     eadc_utils:send_to_pid(My_Pid, Inf)
+		  end, client_all()),
+    client_write(Client),
+    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
+    Client.
 
 need_authority(Nick, Cid) ->
     MatchHead = #account{cid='$1', nick='$2', _='_'},
@@ -548,17 +551,44 @@ need_authority(Nick, Cid) ->
 	    false
     end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% client functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-clients_insert(Client) when is_record(Client, client) ->
-    F = fun() ->
-		mnesia:write(client, Client, write)
+client_get(Sid) ->
+    F = fun()->
+		mnesia:match_object(#client{sid=Sid,_='_'})
 	end,
+
+    case (catch mnesia:transaction(F)) of
+	{atomic, [Client]} ->
+	    Client#client{};
+	_ ->
+	    undefined
+    end.
+
+client_write(Client) when is_record(Client, client)->
+    F=fun() ->
+	      mnesia:write(Client)
+      end,
     mnesia:transaction(F).
 
 client_delete(Sid) ->
     mnesia:transaction(fun() ->
 			       mnesia:delete({client, Sid})
 		       end).
+
+client_all() ->
+    F = fun()->
+		mnesia:match_object(#client{_='_'})
+	end,
+
+    case (catch mnesia:transaction(F)) of
+	{atomic, Clients} when is_list(Clients) ->
+	    Clients;
+	_ ->
+	    {undefined, ?FILE, ?LINE}
+    end.
 
 send_to_socket(Data, #state{socket=Socket}) ->
     ?DEBUG(debug, "send_to_socket event '~s'~n", [Data]),
