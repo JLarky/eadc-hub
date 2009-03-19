@@ -54,6 +54,8 @@ get_client_account(Pid) ->
     F=fun() ->
 	      [Client]=mnesia:match_object(#client{pid=Pid,_='_'}),
 	      case Client#client.login of
+		  'NO KEY' ->
+		      undefined;
 		  undefined ->
 		      undefined;
 		  Login ->
