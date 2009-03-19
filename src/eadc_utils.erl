@@ -193,7 +193,11 @@ send_to_pid(Pid, {args, List}) when is_list(List) ->
     {string, String} = eadc_utils:convert({args, List}),
     eadc_utils:send_to_pid(Pid, String);
 send_to_pid(Pid, String) when is_pid(Pid) and is_list(String) ->
-    gen_fsm:send_event(Pid, {send_to_socket, String}).
+    gen_fsm:send_event(Pid, {send_to_socket, String});
+send_to_pid(undefined, String) when is_list(String) ->
+    ok;
+send_to_pid(Unknown1, Unknown2) ->
+    ?DEBUG(error, "send_to_pid(~w, ~w)\n", [Unknown1, Unknown2]).
 
 broadcast({string,String}) when is_list(String) -> 
     broadcast(fun(Client) -> send_to_pid(Client, String) end);

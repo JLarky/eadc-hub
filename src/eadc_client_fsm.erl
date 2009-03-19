@@ -24,6 +24,8 @@
 %% DEBUG
 -export([test/1, get_pid_by_sid/1, get_unical_cid/1,get_unical_SID/0]).
 
+-export([client_get/1, client_write/1]).
+
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").
 
@@ -148,8 +150,7 @@ init([]) ->
 			true ->
 			    Random=tiger:hash(eadc_utils:random_base32(39)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
-			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end
-}, ?TIMEOUT};
+			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
 			false ->
 			    user_login(Sid,Nick,Cid,Args),
 			    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT}
@@ -333,7 +334,12 @@ terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
     (catch client_delete(Sid)),
     String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
     lists:foreach(fun(Pid) ->
-			  gen_fsm:send_event(Pid, {send_to_socket, String_to_send})
+			  case Pid of
+			      PID when is_pid(PID) ->
+				  gen_fsm:send_event(Pid, {send_to_socket, String_to_send});
+			      _not_pid ->
+				  ok
+			  end
 		  end, all_pids()),
     eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{pids,[]},
 				 {data,[]},{state, State}]),
@@ -402,8 +408,16 @@ client_command(Header, Command, Args, Pids, State) ->
 		Nick=Client#client.nick,
 		?DEBUG(debug, "client_command: chat_msg hook", []),
 		Params=[{pid,self()},{msg,eadc_utils:unquote(Msg)},{sid,Sid},{nick,Nick},
-			{data, Data},{pids,Pids},{state, State}],
+			{data, Data},{pids,Pids},{state, State},{client,Client}],
 		eadc_plugin:hook(chat_msg, Params);
+	    {'E', 'MSG'} -> % private
+		Msg=get_val(par, Args),
+		Sid=list_to_atom(get_val(my_sid, Args)),
+                Nick=Client#client.nick,
+                ?DEBUG(debug, "client_command: priv_msg hook", []),
+                Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},
+                        {data, Data},{pids,Pids},{state, State}],
+                eadc_plugin:hook(priv_msg, Params);
 	    {'B','INF'} ->
 		%% user not allow to change his CT or ID
 		Inf_update=lists:filter(fun(A) -> 

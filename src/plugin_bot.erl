@@ -1,17 +1,29 @@
 -module(plugin_bot).
 
 -export([user_login/1,
-	chat_msg/1]).
+	 chat_msg/1
+	 %%init/1,
+	 %%priv_msg/1
+	]).
 
 -include("eadc.hrl").
 -include("eadc_plugin.hrl").
+
+init(Args) ->
+    Cid=eadc_client_fsm:get_unical_cid(eadc_utils:random_base32(39)),
+    Sid=eadc_client_fsm:get_unical_SID(),
+    Nick="test-room",
+    Inf="BINF "++Sid++" CT5"++" ID"++Cid++" NI"++Nick++" DEтестовая\\sкомната",
+    eadc_client_fsm:client_write(#client{cid=Cid, sid=list_to_atom(Sid), nick=Nick, inf=Inf, pid=undefined}),
+    Args.
+
 
 user_login(Args) ->
     eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
 					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
 
+	%%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
     eadc_utils:send_to_pid(self(), {args, ["IINF", "CT32", "VEJLarky's hub", "NIEADC-hub", "DE}{абе"]}),
-    eadc_utils:send_to_pid(self(), {args, ["IINF", "ASDF", "I40.0.0.0","CT5", "NItest-root", "DEтестовая комната"]}),
     eadc_utils:info_to_pid(self(), "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
     Args.
 
@@ -85,3 +97,9 @@ Admin's commands:
 	    eadc_utils:error_to_pid(self(), Test)
     end.
 
+priv_msg(Args) ->
+    {list, [_EMSG, From_Sid, _To_Sid, Mesg, _PMFJKJ]}=eadc_utils:convert({string, eadc_utils:get_val(data, Args)}),
+
+    Pid=list_to_pid("<0.119.0>"),
+    A=eadc_utils:set_val(pids, eadc_client_fsm:all_pids(), Args),
+    eadc_utils:set_val(data, "EMSG "++From_Sid++" KVSP "++Mesg++" PMKVSP", A).
