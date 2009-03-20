@@ -19,7 +19,7 @@
 %%--------------------------------------------------------------------
 %% @spec (Port::integer(), Module) -> {ok, Pid} | {error, Reason}
 %
-%% @doc Called by a supervisor to start the listening process.
+%% @doc Called by supervisor to start the listening process.
 %% @end
 %%----------------------------------------------------------------------
 start_link(Port, Module) when is_integer(Port), is_atom(Module) ->
