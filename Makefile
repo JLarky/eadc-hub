@@ -13,7 +13,7 @@ tiger:
 	(mkdir -p priv/)
 	(test -f priv/tiger_drv.so || ln -s ../deps/tiger/priv/tiger_drv.so priv/tiger_drv.so)
 
-docs: erlang-docs html-docs
+docs: erlang-docs # html-docs
 
 erlang-docs: doc/edoc
 	(cd src;$(MAKE) docs)

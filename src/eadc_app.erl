@@ -1,3 +1,6 @@
+
+%% @doc Module eadc_app starts all required supervisors and sub-applications like Tiger Hash.
+%% @end
 -module(eadc_app).
 -author('jlarky@gmail.com').
 
@@ -19,14 +22,19 @@
 -define(MAX_TIME,      60).
 -define(DEF_PORT,    4111).
 
-%% A startup function for spawning new client connection handling FSM.
+%% @doc A startup function for spawning new client connection handling FSM.
 %% To be called by the TCP listener process.
+%% @end
 start_client() ->
     supervisor:start_child(eadc_client_sup, []).
 
 %%----------------------------------------------------------------------
 %% Application behaviour callbacks
 %%----------------------------------------------------------------------
+
+%% @spec start(_Type::any(), _Args::any()) -> {ok, Pid} | ignore | {error, Error}
+%% @doc Prepare mnesia tables, start tiger-hash application and start supervisors
+%% @end
 start(_Type, _Args) ->
     mnesia:create_schema([node()]),
     mnesia:start(),
@@ -54,12 +62,19 @@ start(_Type, _Args) ->
     ListenPort = list_to_integer(get_app_env(listen_port, integer_to_list(?DEF_PORT))),
     supervisor:start_link({local, ?MODULE}, ?MODULE, {eadc_sup, ListenPort, eadc_client_fsm}).
 
+%% @spec stop(_S::term()) -> ok
+%% @doc Application callback
 stop(_S) ->
     ok.
 
 %%----------------------------------------------------------------------
 %% Supervisor behaviour callbacks
 %%----------------------------------------------------------------------
+
+%% @spec init(Which_sup::term()) -> Result
+%% Args = term()
+%% Result = {ok, {{RestartStrategy, MaxR, MaxT}, [ChildSpec]}} | ignore
+%% @doc Supervisor callback
 init({eadc_sup, Port, Module}) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
@@ -111,6 +126,11 @@ init([Module]) ->
 %%----------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------
+
+%% @spec get_app_env(atom(), term()) -> {Val | Default}
+%% @doc Return option with name 'Opt' from command line option,
+%% config file or Default
+%% @end
 get_app_env(Opt, Default) ->
     case file:consult("eadc.cfg") of
 	{ok, Data} ->
