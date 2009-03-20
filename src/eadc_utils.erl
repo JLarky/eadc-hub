@@ -18,10 +18,10 @@
 %% @spec convert({FromType::atom(), Arg::term()}) -> {Type::atom(), Val::term()}
 %% FromType = string | list | args
 %% Type = list | string
-%% @doc Convert <pre>
-%% {string, "some litle string"} to {list, ["some", "litle", "string"]}
-%% {list, ["some", "litle string"}] to {string, "some litle string"}
-%% {args, ["some", "litle string"}] to {string, "some litle\\sstring"}
+%% @doc Converts <pre>
+%% {string, "some little string"} to {list, ["some", "little", "string"]}
+%% {list, ["some", "little string"}] to {string, "some little string"}
+%% {args, ["some", "little string"}] to {string, "some little\sstring"}
 %% </pre>
 convert({string, String}) ->
     convert_string (String);
@@ -53,7 +53,7 @@ convert_args(Out, [H|T]) when is_list(H)->
     convert_args(Out++" "++quote(H), T).
 
 %% @spec quote(string()) -> QutedString::string()
-%% @doc escape space, newline and '\' charaters. Like "Hello World" -> "Hello\\sWorld"
+%% @doc quotes space, newline and '\' characters. Like "Hello World" -> "Hello\sWorld"
 quote(String) ->
     lists:foldl(fun(Char, Acc) -> case Char of
 				      $\ ->
@@ -67,7 +67,7 @@ quote(String) ->
 				  end end, [], String).
 
 %% @spec unquote(string()) -> UnqutedString::string()
-%% @doc remove escape character for space, newline and '\' charaters. Like "Hello\\sWorld" -> "Hello World"
+%% @doc removes escape character for space, newline and '\' charaters. Like "Hello\sWorld" -> "Hello World"
 unquote(String) ->
     {Buf, U_String} =
 	lists:foldl(
@@ -88,7 +88,7 @@ unquote(String) ->
 %% @type base32string() = [base32char()]
 %% @type base32char() = ABCDEFGHIJKLMNOPQRSTUVWXYZ234567
 %% @spec random_base32(integer()) -> base32string()
-%% @doc return base32 encoded string with length of Count
+%% @doc returns base32 encoded string with length Count
 random_base32(Count) ->
     {A,B,C}=time(), 
     {D,E,F}=random:seed(),
@@ -100,7 +100,7 @@ random_base32(Count, Output) ->
     random_base32(Count-1, Output)++base32(random:uniform(32)-1).
 
 %% @spec base32(integer()) -> [base32char()]
-%% @doc return base32 character corresponding with V like 1 -> 'B', 31 -> '7'.
+%% @doc returns base32 character corresponding to V like 1 -> 'B', 31 -> '7'.
 %% V is integer from 0 to 31
 %% @see unbase32/1
 base32(V) when (V >=0) and (V < 32)->
@@ -113,7 +113,7 @@ base32(V) ->
     base32(V bsr 5)++base32(V rem 32).
 
 %% @spec base32_encode(string()) -> base32string()
-%% @doc return base32 encoded string of String
+%% @doc returns base32 encoded string of String
 %% @see base32_decode/1
 base32_encode(String) ->
     base32_encode_(list_to_binary(String), _Out=[]).
@@ -149,7 +149,7 @@ unbase32(String) ->
 		end, 0, String).
 
 %% @spec base32_decode(base32string()) -> string()
-%% @doc return base32 decoded string of String
+%% @doc returns base32 decoded string of String
 %% @see base32_encode/1
 base32_decode(String) ->
     Bits=lists:foldl(fun(Elem, Acc) ->
@@ -182,7 +182,7 @@ base32_decode_(Bits, Out) ->
     end.
 
 %% @spec code_reload(atom()) -> {module, Module} | {error, Error}
-%% @doc do 'make' and load Module if it's possible
+%% @doc does 'make' and loads Module if it's possible.
 code_reload(Module) ->
     io:format("~s\n", [os:cmd("cd .. && make")]),
     true = code:soft_purge(Module),
@@ -193,8 +193,8 @@ code_reload(Module) ->
 %% Tuple = {Key, Val}
 %% Key = atom()
 %% Val = string()
-%% @doc parse inf message like "NItest DEdesc" into List=[{'NI', "test"}, {'DE', "desc"}].
-%% In this case "test"=get_val('NI', List), 'NO KEY' = get_val('VRONGKEY', List)
+%% @doc parses inf message like "NItest DEdesc" into List=[{'NI', "test"}, {'DE', "desc"}].
+%% In this case "test"=get_val('NI', List), 'NO KEY' = get_val('WRONGKEY', List)
 %% @see get_val/2
 %% @see deparse_inf/1
 parse_inf(Inf) ->
@@ -208,7 +208,7 @@ parse_inf(Inf) ->
 %% Tuple = {Key, Val}
 %% Key = atom()
 %% Val = string()
-%% @doc combine parsed inf message like [{'NI', "test"}, {'DE', "desc"}] into "NItest DEdesc"
+%% @doc combines parsed inf message like [{'NI', "test"}, {'DE', "desc"}] into "NItest DEdesc"
 %% @see parse_inf/1
 deparse_inf(Parsed_Inf) ->
     lists:foldl(fun({Key, Val}, Acc) ->
@@ -217,12 +217,12 @@ deparse_inf(Parsed_Inf) ->
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Comunication functions
+%% Communication functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @spec send_to_pids(Pids, Message::term()) -> ok
 %% Pids = [pid()]
-%% @doc apply send_to_pid/2 with every pid of Pids
+%% @doc applies send_to_pid/2 to every pid of Pids
 %% @see send_to_pid/2
 send_to_pids(Pids, Param) when is_list(Pids) ->
     lists:foreach(fun(Pid) ->
@@ -232,7 +232,7 @@ send_to_pids(Pids, Param) when is_list(Pids) ->
 %% @spec send_to_pid(pid(), Param::term()) -> ok
 %% Param = {list, List} | {args, List} | List
 %% List = string()
-%% @doc apply {@link convert/1} to Param if needed and sends String to socket controled by gen_fsm with pid Pid
+%% @doc applies {@link convert/1} to Param if needed and sends String to socket controlled by gen_fsm with pid Pid
 send_to_pid(Pid, {list, List}) when is_list(List) ->
     {string, String} = eadc_utils:convert({list, List}),
     eadc_utils:send_to_pid(Pid, String);
@@ -254,15 +254,15 @@ broadcast(F) when is_function(F) ->
     lists:foreach(F, eadc_client_fsm:all_pids()).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% messaging functions
+%% Messaging functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% @spec error_to_pid(pid(), string()) -> ok
-%% @doc send error message to Pid by {@link send_to_pid/2}
+%% @doc sends error message to Pid by {@link send_to_pid/2}
 error_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "100", Message]}).
 %% @spec info_to_pid(pid(), string()) -> ok
-%% @doc send info message to Pid by {@link send_to_pid/2}
+%% @doc sends info message to Pid by {@link send_to_pid/2}
 info_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "000", Message]}).
 
@@ -288,7 +288,7 @@ get_required_field(Key, PInf) ->
 
 %% @spec get_val(atom(), TupleList1) -> Val::term() | 'NO KEY'
 %% TupleLis = [{Key::atom(), Val::term()}]
-%% @doc return value with key Key or 'NO KEY'
+%% @doc returns value with key Key or 'NO KEY'
 get_val(Key, Args) -> 
     case lists:keysearch(Key, 1, Args) of
 	{value,{Key, Val}} -> Val;
@@ -298,17 +298,17 @@ get_val(Key, Args) ->
 %% @spec set_val(atom(), term(), TupleList1) -> TupleList2
 %% TupleLis1 = [{Key::atom(), OldVal::term()}]
 %% TupleLis2 = [{Key::atom(), Val::term()}]
-%% @doc replace tuple {Key, OldVar} with {Key, Val} in list Args 
+%% @doc replaces tuple {Key, OldVar} with {Key, Val} in list Args 
 set_val(Key, Val, Args) -> 
     lists:keyreplace(Key, 1, Args, {Key, Val}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% account functions
+%% Account functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% @type account() = record(account)
 %% @spec account_write(account()) -> {atomic, ok} | {aborted, Reason}
-%% @doc writes account in mnesia table  
+%% @doc writes account into mnesia table  
 account_write(Account) when is_record(Account, account)->
     F=fun() ->
 	      mnesia:write(Account)
@@ -317,7 +317,7 @@ account_write(Account) when is_record(Account, account)->
 
 %% @spec account_all() -> Accounts | {error, Error}
 %% Accounts = [account()]
-%% @doc return list of all account
+%% @doc returns list of all accounts
 account_all() ->
     F = fun()->
 		mnesia:match_object(#account{_='_'})
@@ -331,7 +331,7 @@ account_all() ->
 
 %% @spec account_get(string()) -> Account
 %% Account = account()
-%% @doc return account record with login Login
+%% @doc returns account record with Login
 account_get(Login) ->
     F = fun()->
 		mnesia:match_object(#account{login=Login,_='_'})
@@ -345,7 +345,7 @@ account_get(Login) ->
     end.
 
 %% @spec account_get_login(string(), string()) -> {login, Ligin::string()} | false
-%% @doc find account with this Nick or Cid.
+%% @doc finds account with this Nick or Cid.
 account_get_login(Nick, Cid) ->
     MatchHead = #account{cid='$1', nick='$2', _='_', login='$3'},
     Guard = [{'or',{'==','$2',Nick},{'==','$1',Cid}}], Result = '$3',
