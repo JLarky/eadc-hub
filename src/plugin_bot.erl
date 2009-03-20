@@ -60,28 +60,28 @@ Admin's commands:
 	    case eadc_user:access('reg user') of
 		true ->
 		    [UserName,Pass|_]=Args,
-		    Ok=eadc_utils:account_new(#account{login=UserName, nick=UserName,pass=Pass}),
+		    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,pass=Pass}),
 		    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p", [Ok])));
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
 	"regme" ->
 	    [Pass|_]=Args,UserName=Client#client.nick,
-	    {atomic, ok}=eadc_utils:account_new(#account{login=UserName, nick=UserName,pass=Pass}),
+	    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,pass=Pass}),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Password of user ~s was set to '~s'", [UserName, Pass])));
 	"regclass" ->
 	    case eadc_user:access('reg class') of
 		true ->
 		    [Login, Class|_]=Args,
 		    Account=eadc_utils:account_get(Login),
-		    {atomic, ok}=eadc_utils:account_new(
+		    {atomic, ok}=eadc_utils:account_write(
 				   Account#account{class=list_to_integer(Class)}),
 		    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Class of user ~s was set to '~s'", [Login, Class])));
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
 	"userlist" ->
-	    {atomic, List}=eadc_utils:account_list(),
+	    List=eadc_utils:account_all(),
 	    case eadc_user:access('view pass') of
 		true ->
 		    New_List=List;

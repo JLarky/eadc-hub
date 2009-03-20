@@ -77,6 +77,6 @@ create_admin_account() ->
     if (Login == 'NO KEY') or (Pass == 'NO KEY') ->
 	    dont_create_account;
        true ->
-	    eadc_utils:account_new(
+	    eadc_utils:account_write(
 	      #account{login=Login, nick=Login, pass=Pass, class=10})
     end.
