@@ -12,7 +12,7 @@
 %% API
 -export([init/0]).
 -export([access/1]).
--export([get_client_account/1]).
+-export([get_client_account/1, client_find/1]).
 
 %%====================================================================
 %% API
@@ -65,6 +65,20 @@ get_client_account(Pid) ->
       end,
     {atomic, Out}=mnesia:transaction(F),
     Out.
+
+%% @spec client_find(ClientPattern) -> [ClientRecord]
+%% @doc returns list of Clients which match with ClentPattern
+client_find(Client) when is_record(Client, client) ->
+    F = fun()->
+		mnesia:match_object(Client)
+	end,
+
+    case (catch mnesia:transaction(F)) of
+	{atomic, Clients} ->
+	    Clients;
+	_ ->
+	    undefined
+    end.
 
 %%====================================================================
 %% Internal functions
