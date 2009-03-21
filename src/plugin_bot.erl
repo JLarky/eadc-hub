@@ -69,6 +69,24 @@ Admin's commands:
 	    [Pass|_]=Args,UserName=Client#client.nick,
 	    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,pass=Pass}),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Password of user ~s was set to '~s'", [UserName, Pass])));
+	"kick" ->
+	    case eadc_user:access('kick any') of
+		true ->
+		    try
+			?DEBUG(error, "!!! ~w", []),
+			[User|_]=Args,UserName=Client#client.nick,
+			[User_Client]=eadc_user:client_find(#client{nick=User, _='_'}),
+			Pid_to_kill=User_Client#client.pid,
+			eadc_utils:broadcast(fun(Pid) -> eadc_utils:info_to_pid(Pid, "OP "++UserName++" is trying to kick '"++User++"'") end),
+			timer:sleep(100),
+			gen_fsm:send_event(Pid_to_kill, kill_your_self)			
+		    catch
+			error:{badmatch,[]} ->
+			    eadc_utils:info_to_pid(self(), "User not found.")
+		    end;
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
 	"regclass" ->
 	    case eadc_user:access('reg class') of
 		true ->
