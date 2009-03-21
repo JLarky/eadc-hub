@@ -1,6 +1,8 @@
 Tiger Hash is now working as erlang application, so do
 
  $ make
+ $ make tiger # Linux, Mac OS and so on
+ $ make tiger-win # Windows-only
 
  $ erl -pa ebin -boot start_sasl -s tiger
  Eshell V5.6.3  (abort with ^G)
@@ -11,8 +13,14 @@ hash() take string parameter and return Tiger Hash in 24-bytes string
 
 
 
-I've tested it only in Lunux, more likely it will not work in Windows. If you can make it work there, your patches are very welcome.
+Troubleshooting:
+
+If you've got "error: erl_driver.h: No such file or directory" than find this file somewhere like /usr/local/lib/erlang/usr/include/erl_driver.h or C:\Program Files\erl\usr\include and just copy to priv directory where files tiger.c and tiger_drv.c are located.
 
 
+Requirements:
+* erlang-otp
+* gcc (MinGW)
+* make
 
 (c) 2009, JLarky <jlarky@gmail.com>

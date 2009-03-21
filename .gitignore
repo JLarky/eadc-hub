@@ -9,6 +9,8 @@ ebin/*.app
 error.log
 Mnesia*
 priv/*.so
+priv/*.dll
 deps/*/ebin/*.beam
 deps/*/ebin/*.app
 deps/*/priv/*.so
+deps/*/priv/*.dll
