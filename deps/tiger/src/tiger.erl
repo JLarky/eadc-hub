@@ -43,7 +43,7 @@ start(_Type, _Args) ->
 			      _ ->
 				  false
 			  end
-		  end, ["priv", "../priv", "deps/tiger/priv"]),
+		  end, ["priv", "../priv"]),
     case Loaded of
 	true ->
 	    supervisor:start_link({local, ?MODULE}, ?MODULE, SharedLib);
