@@ -33,7 +33,7 @@ EBIN_FILES_NO_DOCS = $(ERL_OBJECTS) $(APP_FILES:%.app=../ebin/%.app)
 MODULES = $(ERL_SOURCES:%.erl=%)
 
 ../ebin/%.app: %.app
-	cp $< $@
+	cp $< $@ || copy $< "$@"
 
 $(EBIN_DIR)/%.$(EMULATOR): %.erl
 	$(ERLC) $(ERLC_FLAGS) -o $(EBIN_DIR) $<

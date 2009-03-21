@@ -4,7 +4,7 @@ MARKDOWN_TARGETS=$(patsubst doc/%.md,doc/html/%.html,$(MARKDOWN_SOURCES))
 all: eadc boot
 
 eadc: ebin
-	(cd src;$(MAKE))
+	cd src && $(MAKE)
 
 tiger:
 	(cd deps/tiger;$(MAKE); $(MAKE) tiger;)
@@ -12,9 +12,9 @@ tiger:
 	(test -f priv/tiger_drv.so || ln -s ../deps/tiger/priv/tiger_drv.so priv/tiger_drv.so)
 
 tiger-win:
-	(cd deps/tiger;$(MAKE); $(MAKE) tiger-win;)
-	(mkdir -p priv/)
-	(cp deps/tiger/priv/tiger_drv.dll priv/tiger_drv.dll)
+	cd deps\tiger && $(MAKE) && $(MAKE) tiger-win && cd ../..
+	mkdir priv || echo hate Windows
+	copy deps\tiger\priv\tiger_drv.dll priv\tiger_drv.dll
 
 
 docs: erlang-docs # html-docs
@@ -49,7 +49,7 @@ clean: clean-docs
 	$(RM) ebin/*.boot ebin/*.script ebin/*crash.dump ebin/*~ src/*~ priv/*~
 
 clean-docs: clean-html
-	rm -rf doc/edoc
+	$(rm) -rf doc/edoc
 
 clean-html:
 	rm -rf doc/html
@@ -57,7 +57,7 @@ clean-html:
 boot: ebin/eadc.boot
 
 ebin/eadc.boot:
-	(cd ebin; erl -noshel -run systools make_script "eadc" -run erlang halt )
+	(cd ebin && erl -noshel -run systools make_script "eadc" -run erlang halt )
 
 cleandb:
 	$(RM) -r ebin/Mnesia*

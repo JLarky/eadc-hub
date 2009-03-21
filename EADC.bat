@@ -1,0 +1,1 @@
+cd ebin && erl -boot eadc
