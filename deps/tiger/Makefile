@@ -1,7 +1,7 @@
 all: ebin ebin/tiger.beam ebin/tiger.app
 
 ebin:
-	mkdir -p ebin
+	mkdir ebin || echo hate Windows
 
 ebin/%.beam: src/%.erl
 	erlc -o ebin $<
@@ -9,15 +9,15 @@ ebin/%.beam: src/%.erl
 tiger-win: priv/tiger_drv.dll
 
 priv/tiger_drv.dll: priv/*.c
-	(cd priv; make tiger-win;)
+	cd priv && $(MAKE) tiger-win
 
 tiger: priv/tiger_drv.so
 
 priv/tiger_drv.so: priv/*.c
-	(cd priv; make tiger;)
+	(cd priv; $(MAKE) tiger)
 
 ebin/tiger.app: src/tiger.app
-	cp src/tiger.app ebin/tiger.app
+	cp "$<" "$@" || copy src\tiger.app ebin\tiger.app 
 
 clean:
 	rm -rf ebin/

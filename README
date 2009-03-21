@@ -4,7 +4,8 @@ make tiger # Lunux
 make tiger-win # Windows
 
 To start hub do
-./EADC
+./EADC # Linux
+EADC.bat # Windows
 
 And check it on adc://localhost:4111
 
