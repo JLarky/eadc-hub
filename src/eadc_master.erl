@@ -20,7 +20,7 @@
 %%--------------------------------------------------------------------
 %% @spec () -> {ok, Pid} | {error, Reason}
 %
-%% @doc Called by a supervisor to start the listening process.
+%% @doc Called by supervisor to start the listening process.
 %% @end
 %%----------------------------------------------------------------------
 start_link() ->
@@ -38,7 +38,7 @@ start_link() ->
 %%                            {stop, Reason}
 %%
 %% @doc Called by gen_server framework at process startup.
-%%      Create listening socket.
+%%      Creates listening socket.
 %% @end
 %%----------------------------------------------------------------------
 init(_Args) ->

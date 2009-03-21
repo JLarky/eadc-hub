@@ -33,7 +33,7 @@ start_client() ->
 %%----------------------------------------------------------------------
 
 %% @spec start(_Type::any(), _Args::any()) -> {ok, Pid} | ignore | {error, Error}
-%% @doc Prepare mnesia tables, start tiger-hash application and start supervisors
+%% @doc Prepares mnesia tables, starts tiger-hash application and starts supervisors
 %% @end
 start(_Type, _Args) ->
     mnesia:create_schema([node()]),
@@ -128,7 +128,7 @@ init([Module]) ->
 %%----------------------------------------------------------------------
 
 %% @spec get_app_env(atom(), term()) -> {Val | Default}
-%% @doc Return option with name 'Opt' from command line option,
+%% @doc Returns option with name 'Opt' from command line option,
 %% config file or Default
 %% @end
 get_app_env(Opt, Default) ->
