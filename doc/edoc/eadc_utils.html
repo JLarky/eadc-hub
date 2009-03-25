@@ -1,0 +1,228 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module eadc_utils</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module eadc_utils</h1>
+<ul class="index"><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+
+
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-account">account()</a></h3>
+<p><tt>account() = <a href="#type-record">record(account)</a></tt></p>
+
+
+<h3 class="typedecl"><a name="type-base32char">base32char()</a></h3>
+<p><tt>base32char() = ABCDEFGHIJKLMNOPQRSTUVWXYZ234567</tt></p>
+
+
+<h3 class="typedecl"><a name="type-base32string">base32string()</a></h3>
+<p><tt>base32string() = [<a href="#type-base32char">base32char()</a>]</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#account_all-0">account_all/0</a></td><td>returns list of all accounts.</td></tr>
+<tr><td valign="top"><a href="#account_get-1">account_get/1</a></td><td>returns account record with Login.</td></tr>
+<tr><td valign="top"><a href="#account_get_login-2">account_get_login/2</a></td><td>finds account with this Nick or Cid.</td></tr>
+<tr><td valign="top"><a href="#account_write-1">account_write/1</a></td><td>writes account into mnesia table.</td></tr>
+<tr><td valign="top"><a href="#base32-1">base32/1</a></td><td>returns base32 character corresponding to V like 1 -&gt; 'B', 31 -&gt; '7'.</td></tr>
+<tr><td valign="top"><a href="#base32_decode-1">base32_decode/1</a></td><td>returns base32 decoded string of String.</td></tr>
+<tr><td valign="top"><a href="#base32_encode-1">base32_encode/1</a></td><td>returns base32 encoded string of String.</td></tr>
+<tr><td valign="top"><a href="#broadcast-1">broadcast/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#code_reload-1">code_reload/1</a></td><td>does 'make' and loads Module if it's possible.</td></tr>
+<tr><td valign="top"><a href="#convert-1">convert/1</a></td><td>Converts <pre>
+  {string, "some little string"} to {list, ["some", "little", "string"]}
+  {list, ["some", "little string"}] to {string, "some little string"}
+  {args, ["some", "little string"}] to {string, "some little\sstring"}
+  </pre></td></tr>
+<tr><td valign="top"><a href="#deparse_inf-1">deparse_inf/1</a></td><td>combines parsed inf message like [{'NI', "test"}, {'DE', "desc"}] into "NItest DEdesc".</td></tr>
+<tr><td valign="top"><a href="#error_to_pid-2">error_to_pid/2</a></td><td>sends error message to Pid by <a href="#send_to_pid-2"><code>send_to_pid/2</code></a></td></tr>
+<tr><td valign="top"><a href="#get_required_field-2">get_required_field/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_val-2">get_val/2</a></td><td>returns value with key Key or 'NO KEY'.</td></tr>
+<tr><td valign="top"><a href="#info_to_pid-2">info_to_pid/2</a></td><td>sends info message to Pid by <a href="#send_to_pid-2"><code>send_to_pid/2</code></a></td></tr>
+<tr><td valign="top"><a href="#parse_inf-1">parse_inf/1</a></td><td>parses inf message like "NItest DEdesc" into List=[{'NI', "test"}, {'DE', "desc"}].</td></tr>
+<tr><td valign="top"><a href="#quote-1">quote/1</a></td><td>quotes space, newline and '\' characters.</td></tr>
+<tr><td valign="top"><a href="#random_base32-1">random_base32/1</a></td><td>returns base32 encoded string with length Count.</td></tr>
+<tr><td valign="top"><a href="#redirect_to-3">redirect_to/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#send_to_pid-2">send_to_pid/2</a></td><td>applies <a href="#convert-1"><code>convert/1</code></a> to Param if needed and sends String to socket controlled by gen_fsm with pid Pid.</td></tr>
+<tr><td valign="top"><a href="#send_to_pids-2">send_to_pids/2</a></td><td>applies send_to_pid/2 to every pid of Pids.</td></tr>
+<tr><td valign="top"><a href="#set_val-3">set_val/3</a></td><td>replaces tuple {Key, OldVar} with {Key, Val} in list Args.</td></tr>
+<tr><td valign="top"><a href="#unbase32-1">unbase32/1</a></td><td>A=unbase32(base32(A)).</td></tr>
+<tr><td valign="top"><a href="#unquote-1">unquote/1</a></td><td>removes escape character for space, newline and '\' charaters.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="account_all-0">account_all/0</a></h3>
+<div class="spec">
+<p><tt>account_all() -&gt; Accounts | {error, Error}</tt>
+<ul class="definitions"><li><tt>Accounts = [<a href="#type-account">account()</a>]</tt></li>
+</ul></p>
+</div><p>returns list of all accounts</p>
+
+<h3 class="function"><a name="account_get-1">account_get/1</a></h3>
+<div class="spec">
+<p><tt>account_get(Login::string()) -&gt; Account</tt>
+<ul class="definitions"><li><tt>Account = <a href="#type-account">account()</a></tt></li>
+</ul></p>
+</div><p>returns account record with Login</p>
+
+<h3 class="function"><a name="account_get_login-2">account_get_login/2</a></h3>
+<div class="spec">
+<p><tt>account_get_login(Nick::string(), Cid::string()) -&gt; {login, Ligin::string()} | false</tt></p>
+</div><p>finds account with this Nick or Cid.</p>
+
+<h3 class="function"><a name="account_write-1">account_write/1</a></h3>
+<div class="spec">
+<p><tt>account_write(Account::<a href="#type-account">account()</a>) -&gt; {atomic, ok} | {aborted, Reason}</tt></p>
+</div><p>writes account into mnesia table</p>
+
+<h3 class="function"><a name="base32-1">base32/1</a></h3>
+<div class="spec">
+<p><tt>base32(V::integer()) -&gt; [<a href="#type-base32char">base32char()</a>]</tt></p>
+</div><p>returns base32 character corresponding to V like 1 -&gt; 'B', 31 -&gt; '7'.
+  V is integer from 0 to 31</p>
+<p><b>See also:</b> <a href="#unbase32-1">unbase32/1</a>.</p>
+
+<h3 class="function"><a name="base32_decode-1">base32_decode/1</a></h3>
+<div class="spec">
+<p><tt>base32_decode(String::<a href="#type-base32string">base32string()</a>) -&gt; string()</tt></p>
+</div><p>returns base32 decoded string of String</p>
+<p><b>See also:</b> <a href="#base32_encode-1">base32_encode/1</a>.</p>
+
+<h3 class="function"><a name="base32_encode-1">base32_encode/1</a></h3>
+<div class="spec">
+<p><tt>base32_encode(String::string()) -&gt; <a href="#type-base32string">base32string()</a></tt></p>
+</div><p>returns base32 encoded string of String</p>
+<p><b>See also:</b> <a href="#base32_decode-1">base32_decode/1</a>.</p>
+
+<h3 class="function"><a name="broadcast-1">broadcast/1</a></h3>
+<div class="spec">
+<p><tt>broadcast(Argument::term()) -&gt; ok</tt>
+<ul class="definitions"><li><tt>Argument = {string, String::string} | <a href="#type-fun">'fun'()</a></tt></li>
+</ul></p>
+</div>
+
+<h3 class="function"><a name="code_reload-1">code_reload/1</a></h3>
+<div class="spec">
+<p><tt>code_reload(Module::atom()) -&gt; {module, Module} | {error, Error}</tt></p>
+</div><p>does 'make' and loads Module if it's possible.</p>
+
+<h3 class="function"><a name="convert-1">convert/1</a></h3>
+<div class="spec">
+<p><tt>convert(X1::{FromType::atom(), Arg::term()}) -&gt; {Type::atom(), Val::term()}</tt>
+<ul class="definitions"><li><tt>FromType = string | list | args</tt></li>
+<li><tt>Type = list | string</tt></li>
+</ul></p>
+</div><p>Converts <pre>
+  {string, "some little string"} to {list, ["some", "little", "string"]}
+  {list, ["some", "little string"}] to {string, "some little string"}
+  {args, ["some", "little string"}] to {string, "some little\sstring"}
+  </pre></p>
+
+<h3 class="function"><a name="deparse_inf-1">deparse_inf/1</a></h3>
+<div class="spec">
+<p><tt>deparse_inf(Parsed_Inf::TupleList) -&gt; string()</tt>
+<ul class="definitions"><li><tt>TupleList = [Tuple]</tt></li>
+<li><tt>Tuple = {Key, Val}</tt></li>
+<li><tt>Key = atom()</tt></li>
+<li><tt>Val = string()</tt></li>
+</ul></p>
+</div><p>combines parsed inf message like [{'NI', "test"}, {'DE', "desc"}] into "NItest DEdesc"</p>
+<p><b>See also:</b> <a href="#parse_inf-1">parse_inf/1</a>.</p>
+
+<h3 class="function"><a name="error_to_pid-2">error_to_pid/2</a></h3>
+<div class="spec">
+<p><tt>error_to_pid(Pid::pid(), Message::string()) -&gt; ok</tt></p>
+</div><p>sends error message to Pid by <a href="#send_to_pid-2"><code>send_to_pid/2</code></a></p>
+
+<h3 class="function"><a name="get_required_field-2">get_required_field/2</a></h3>
+<div class="spec">
+<p><tt>get_required_field(Key, PInf) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="get_val-2">get_val/2</a></h3>
+<div class="spec">
+<p><tt>get_val(Key::atom(), Args::TupleList1) -&gt; Val::term() | 'NO KEY'</tt>
+<ul class="definitions"><li><tt>TupleLis = [{Key::atom(), Val::term()}]</tt></li>
+</ul></p>
+</div><p>returns value with key Key or 'NO KEY'</p>
+
+<h3 class="function"><a name="info_to_pid-2">info_to_pid/2</a></h3>
+<div class="spec">
+<p><tt>info_to_pid(Pid::pid(), Message::string()) -&gt; ok</tt></p>
+</div><p>sends info message to Pid by <a href="#send_to_pid-2"><code>send_to_pid/2</code></a></p>
+
+<h3 class="function"><a name="parse_inf-1">parse_inf/1</a></h3>
+<div class="spec">
+<p><tt>parse_inf(Inf::string()) -&gt; TupleList</tt>
+<ul class="definitions"><li><tt>TupleList = [Tuple]</tt></li>
+<li><tt>Tuple = {Key, Val}</tt></li>
+<li><tt>Key = atom()</tt></li>
+<li><tt>Val = string()</tt></li>
+</ul></p>
+</div><p>parses inf message like "NItest DEdesc" into List=[{'NI', "test"}, {'DE', "desc"}].
+  In this case "test"=get_val('NI', List), 'NO KEY' = get_val('WRONGKEY', List)</p>
+<p><b>See also:</b> <a href="#deparse_inf-1">deparse_inf/1</a>, <a href="#get_val-2">get_val/2</a>.</p>
+
+<h3 class="function"><a name="quote-1">quote/1</a></h3>
+<div class="spec">
+<p><tt>quote(String::string()) -&gt; QutedString::string()</tt></p>
+</div><p>quotes space, newline and '\' characters. Like "Hello World" -&gt; "Hello\sWorld"</p>
+
+<h3 class="function"><a name="random_base32-1">random_base32/1</a></h3>
+<div class="spec">
+<p><tt>random_base32(Count::integer()) -&gt; <a href="#type-base32string">base32string()</a></tt></p>
+</div><p>returns base32 encoded string with length Count</p>
+
+<h3 class="function"><a name="redirect_to-3">redirect_to/3</a></h3>
+<div class="spec">
+<p><tt>redirect_to(Pid, Sid, Hub) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="send_to_pid-2">send_to_pid/2</a></h3>
+<div class="spec">
+<p><tt>send_to_pid(Pid::pid(), Param::term()) -&gt; ok</tt>
+<ul class="definitions"><li><tt>Param = {list, List} | {args, List} | List</tt></li>
+<li><tt>List = string()</tt></li>
+</ul></p>
+</div><p>applies <a href="#convert-1"><code>convert/1</code></a> to Param if needed and sends String to socket controlled by gen_fsm with pid Pid</p>
+
+<h3 class="function"><a name="send_to_pids-2">send_to_pids/2</a></h3>
+<div class="spec">
+<p><tt>send_to_pids(Pids, Message::term()) -&gt; ok</tt>
+<ul class="definitions"><li><tt>Pids = [pid()]</tt></li>
+</ul></p>
+</div><p>applies send_to_pid/2 to every pid of Pids</p>
+<p><b>See also:</b> <a href="#send_to_pid-2">send_to_pid/2</a>.</p>
+
+<h3 class="function"><a name="set_val-3">set_val/3</a></h3>
+<div class="spec">
+<p><tt>set_val(Key::atom(), Val::term(), Args::TupleList1) -&gt; TupleList2</tt>
+<ul class="definitions"><li><tt>TupleLis1 = [{Key::atom(), OldVal::term()}]</tt></li>
+<li><tt>TupleLis2 = [{Key::atom(), Val::term()}]</tt></li>
+</ul></p>
+</div><p>replaces tuple {Key, OldVar} with {Key, Val} in list Args</p>
+
+<h3 class="function"><a name="unbase32-1">unbase32/1</a></h3>
+<div class="spec">
+<p><tt>unbase32(String::<a href="#type-base32char">base32char()</a>) -&gt; integer()</tt></p>
+</div><p>A=unbase32(base32(A))</p>
+<p><b>See also:</b> <a href="#base32-1">base32/1</a>.</p>
+
+<h3 class="function"><a name="unquote-1">unquote/1</a></h3>
+<div class="spec">
+<p><tt>unquote(String::string()) -&gt; UnqutedString::string()</tt></p>
+</div><p>removes escape character for space, newline and '\' charaters. Like "Hello\sWorld" -&gt; "Hello World"</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Mar 22 2009, 22:13:25.</i></p>
+</body>
+</html>

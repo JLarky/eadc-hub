@@ -24,7 +24,7 @@
 %% DEBUG
 -export([test/1, get_pid_by_sid/1, get_unical_cid/1,get_unical_SID/0]).
 
--export([client_get/1, client_write/1]).
+-export([client_get/1, client_write/1, client_delete/1]).
 
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").
@@ -323,8 +323,9 @@ handle_info(Info, StateName, StateData) ->
 %%-------------------------------------------------------------------------
 terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
-    (catch client_delete(Sid)),
     String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
+    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{pids,[]},
+				 {data,[]},{state, State}]),
     lists:foreach(fun(Pid) ->
 			  case Pid of
 			      PID when is_pid(PID) ->
@@ -333,8 +334,7 @@ terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
 				  ok
 			  end
 		  end, all_pids()),
-    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{pids,[]},
-				 {data,[]},{state, State}]),
+    (catch client_delete(Sid)),
     (catch gen_tcp:send(Socket, String_to_send)),
     (catch gen_tcp:close(Socket)),
     ok.
