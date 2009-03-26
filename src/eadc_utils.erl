@@ -13,6 +13,8 @@
 
 -export([account_write/1, account_all/0, account_get/1, account_get_login/2]).
 
+-export([get_option/3, set_option/3, get_options/1]).
+
 -include("eadc.hrl").
 
 %% @spec convert({FromType::atom(), Arg::term()}) -> {Type::atom(), Val::term()}
@@ -241,7 +243,7 @@ send_to_pid(Pid, {args, List}) when is_list(List) ->
     eadc_utils:send_to_pid(Pid, String);
 send_to_pid(Pid, String) when is_pid(Pid) and is_list(String) ->
     gen_fsm:send_event(Pid, {send_to_socket, String});
-send_to_pid(undefined, String) when is_list(String) ->
+send_to_pid(Atom, String) when is_atom(Atom) andalso is_list(String) ->
     ok;
 send_to_pid(Unknown1, Unknown2) ->
     ?DEBUG(error, "send_to_pid(~w, ~w)\n", [Unknown1, Unknown2]).
@@ -267,13 +269,13 @@ info_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "000", Message]}).
 
 redirect_to(Pid, Sid, Hub) ->
-    R_msg="You are redirected to dchub://jlarky.punklan.net",
+    R_msg="You are redirected to "++Hub,
     eadc_utils:info_to_pid(Pid, R_msg),
     SID= if
 	     is_atom(Sid) -> atom_to_list(Sid);
 	     is_list(Sid) -> Sid
 	 end,
-    eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RDdchub://jlarky.punklan.net", "MS"++R_msg]}),
+    eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RD"++Hub, "MS"++R_msg]}),
     gen_fsm:send_event(Pid, kill_your_self).
 
 get_required_field(Key, PInf) ->
@@ -358,4 +360,33 @@ account_get_login(Nick, Cid) ->
 	    {login, Log};
 	_ ->
 	    false
+    end.
+
+
+get_option(Ns, Key, Default) ->
+    F = fun()->
+		mnesia:match_object(#option{id={Ns, Key}, _='_'})
+	end,
+    case (catch mnesia:transaction(F)) of
+	{atomic, [Val|_]=List} when is_list(List) ->
+	    Val#option.val;
+	_ ->
+	    Default
+    end.
+
+set_option(Ns, Key, Val) ->
+    F = fun()->
+		mnesia:write(#option{id={Ns, Key}, val=Val})
+	end,
+    (catch mnesia:transaction(F)).
+
+get_options(OptionTemplate) when is_record(OptionTemplate, option)->
+    F = fun()->
+		mnesia:match_object(OptionTemplate)
+	end,
+    case (catch mnesia:transaction(F)) of
+	{atomic, List} when is_list(List) ->
+	    List;
+	Error ->
+	    {error, Error}
     end.

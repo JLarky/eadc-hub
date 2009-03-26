@@ -38,9 +38,14 @@ start_client() ->
 start(_Type, _Args) ->
     mnesia:create_schema([node()]),
     mnesia:start(),
+    eadc_app:start_table(option, [{attributes,
+				   record_info(fields, option)},
+				  {disc_copies, [node()]}], []),
+
     eadc_app:start_table(client, [{attributes,
 			      record_info(fields, client)},
 			     {disc_copies, [node()]}], [{clear, true}]),
+    
     eadc_user:init(),
 
     error_logger:logfile({open, 'error.log'}),error_logger:tty(false),
@@ -155,9 +160,11 @@ start_table(TableName, MnesiaOptions, Options) ->
 	    mnesia:wait_for_tables([TableName], 10000),
 	    case eadc_utils:get_val(clear, Options) of
 		true ->
-		    mnesia:clear_table(TableName);
+		    {atomic, ok}=mnesia:clear_table(TableName),
+		    ok;
 		_ -> ok
 	    end;
 	false ->
-	    mnesia:create_table(TableName,MnesiaOptions)
+	    {atomic, ok}=mnesia:create_table(TableName,MnesiaOptions),
+	    ok
     end.

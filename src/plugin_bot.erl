@@ -17,13 +17,18 @@ init(Args) ->
     eadc_client_fsm:client_write(#client{cid=Cid, sid=list_to_atom(Sid), nick=Nick, inf=Inf, pid=undefined}),
     Args.
 
+topic_to_pids(Pids) ->
+    Topic=eadc_utils:get_option(mainchat, topic, "No topic set"),
+    HubName=eadc_utils:get_option(hub, name, "EADC. ADC hub written in Erlang"),
+    F=fun(P) -> eadc_utils:send_to_pid(P, {args, ["IINF", "CT32", "VEJLarky's hub", "NI"++HubName, "DE"++Topic]}) end,
+    lists:foreach(F, Pids).
 
 user_login(Args) ->
     eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
 					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
 
 	%%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
-    eadc_utils:send_to_pid(self(), {args, ["IINF", "CT32", "VEJLarky's hub", "NIEADC-hub", "DE}{абе"]}),
+    topic_to_pids([self()]),
     eadc_utils:info_to_pid(self(), "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
     Args.
 
@@ -54,6 +59,9 @@ User's commands:
 Admin's commands:
  !regclass <user> <class> - change users's class to <class>
  !userlist - show all users with their's passwords
+ !topic <topic> - set the hub's topic
+ !getconfig - show all set options
+ !setconfig <key> <val> - set hub's option 
 ",
 	    eadc_utils:info_to_pid(self(), Hlp);
 	"regnewuser" ->
@@ -73,7 +81,6 @@ Admin's commands:
 	    case eadc_user:access('kick any') of
 		true ->
 		    try
-			?DEBUG(error, "!!! ~w", []),
 			[User|_]=Args,UserName=Client#client.nick,
 			[User_Client]=eadc_user:client_find(#client{nick=User, _='_'}),
 			Pid_to_kill=User_Client#client.pid,
@@ -107,6 +114,35 @@ Admin's commands:
 		    New_List=lists:map(fun(A) -> A#account{pass="***"} end, List)
 	    end,
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Users:\n~p", [New_List])));
+	"topic" ->
+	    case eadc_user:access('change topic') of
+		true ->
+		    Topic=string:join(Args, " "),
+		    Ok=eadc_utils:set_option(mainchat, topic, Topic),
+		    AllPids=eadc_client_fsm:all_pids(),
+		    topic_to_pids(AllPids);		    
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"setconfig" ->
+	    case eadc_user:access('set config') of
+		true ->
+		    [Key | Rest] = Args,
+		    Val=string:join(Rest, " "),
+		    Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val);
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"getconfig" ->
+	    case eadc_user:access('get config') of
+		true ->
+		    AllOptions=eadc_utils:get_options({option, {hub, '_'}, '_'}),
+		    Options=lists:map(fun(E) -> {hub, Key}=E#option.id, Val=E#option.val, atom_to_list(Key)++" => '"++Val++"'\n" end, AllOptions),
+		    Out=string:join(Options, " "),
+		    eadc_utils:info_to_pid(self(), "Config list:\n"++Out);
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
 	_ ->
 	    io:format("~s", [Command]),
 	    eadc_utils:info_to_pid(self(), "Unknown command"),
