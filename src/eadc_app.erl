@@ -14,7 +14,7 @@
 -export([start/2, stop/1, init/1]).
 
 %% Utility for get configure options
--export([get_app_env/2]).
+-export([get_app_env/2, start_table/3]).
 
 -include("eadc.hrl").
 
@@ -38,22 +38,13 @@ start_client() ->
 start(_Type, _Args) ->
     mnesia:create_schema([node()]),
     mnesia:start(),
-    T=client,
-    case lists:member(T, mnesia:system_info(tables)) of
-	true ->
-	    mnesia:wait_for_tables([T], 10000),
-	    mnesia:clear_table(T);
-	false ->
-	    mnesia:create_table(T,
-				[{attributes, 
-				  record_info(fields, client)},
-				 {disc_copies, [node()]}])
-    end,
-
+    eadc_app:start_table(client, [{attributes,
+			      record_info(fields, client)},
+			     {disc_copies, [node()]}], [{clear, true}]),
     eadc_user:init(),
 
-    error_logger:logfile({open, 'error.log'}),
-    error_logger:tty(false),
+    error_logger:logfile({open, 'error.log'}),error_logger:tty(false),
+
     eadc_plugin:hook(init, [{pids,[]},{data,[]}]),
 
     code:add_patha("../deps/tiger/ebin/"),
@@ -152,4 +143,21 @@ get_app_env_(Opt, Default) ->
 		{ok, [[Val | _]]} -> Val;
 		error       -> Default
 	    end
+    end.
+
+%% @spec start_table(atom(), MnesiaOptionList, OptionList) -> ok
+%% @doc If table <code>TableName</code> exists just do <code>mnesia:wait_for_tables</code>
+%% if Options contain {clear, true} than will be run mnesia:clear_table. MnesiaOptions will
+%% be passed to </code>mnesia:create_table</code>
+start_table(TableName, MnesiaOptions, Options) ->
+    case lists:member(TableName, mnesia:system_info(tables)) of
+	true ->
+	    mnesia:wait_for_tables([TableName], 10000),
+	    case eadc_utils:get_val(clear, Options) of
+		true ->
+		    mnesia:clear_table(TableName);
+		_ -> ok
+	    end;
+	false ->
+	    mnesia:create_table(TableName,MnesiaOptions)
     end.
