@@ -153,7 +153,7 @@ get_app_env_(Opt, Default) ->
 %% @spec start_table(atom(), MnesiaOptionList, OptionList) -> ok
 %% @doc If table <code>TableName</code> exists just do <code>mnesia:wait_for_tables</code>
 %% if Options contain {clear, true} than will be run mnesia:clear_table. MnesiaOptions will
-%% be passed to </code>mnesia:create_table</code>
+%% be passed to <code>mnesia:create_table</code>
 start_table(TableName, MnesiaOptions, Options) ->
     case lists:member(TableName, mnesia:system_info(tables)) of
 	true ->

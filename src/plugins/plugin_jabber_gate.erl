@@ -15,7 +15,8 @@
 
 -include("eadc.hrl").
 
--export(['WAIT FOR REPLY'/2,
+-export(['WAIT FOR SOCKET'/2,
+	 'WAIT FOR REPLY'/2,
 	'WAIT FOR HANDSHAKE'/2,
 	'NORMAL'/2]).
 
@@ -38,15 +39,31 @@ init(Args) when is_list(Args) -> %% plugin hook
     Secret=eadc_utils:get_val(ejabberd_secret, Optins),
 
     io:format("!!~w\n", [gen_fsm:start_link({local, jabber_server}, ?MODULE, #plug_state{host=Host, port=Port,
-								 secret=Secret, vhost="dc.localhost",
-											 conf="test@conference.localhost"}, [])]),
+								 secret=Secret, vhost="dc.punklan.net",
+											 %%conf="test@conference.punklan.net"
+											 conf="dc@conference.jabber.spbu.ru"
+											}, [])]),
     Args;
 
-init(#plug_state{host=Host, port=Port, vhost=Vhost}=State) -> %% gen_fsm callback
+
+init(State) when is_record(State, plug_state) ->
+    {ok, 'WAIT FOR SOCKET', State, 1}.
+
+'WAIT FOR SOCKET'(timeout, #plug_state{host=Host, port=Port, vhost=Vhost}=State) -> %% gen_fsm callback
+    case (catch connect(Host, Port, Vhost)) of
+	Sock when is_port(Sock) ->
+	    {next_state, 'WAIT FOR REPLY', State#plug_state{socket=Sock, tcp_buf=""}};
+	Error ->
+	    ?DEBUG(error, "jabber-gate can't connect ~w\n", [Error]),
+	    %%timer:sleep(5000),
+	    {next_state, 'WAIT FOR SOCKET', State, 1000}
+    end.
+
+connect(Host, Port, Vhost) ->
     {ok, Sock} = gen_tcp:connect(Host, Port, [{active, once}]),
     ok = gen_tcp:send(Sock, "<?xml version='1.0'?><stream:stream xmlns:stream='http://etherx.jabber.org/streams' "
 		      ++"xmlns='jabber:component:accept' id='dc' to='"++Vhost++"'>"),
-    {ok, 'WAIT FOR REPLY', State#plug_state{socket=Sock}}.
+    Sock.
 
 'WAIT FOR REPLY'({tcp, Bin}, #plug_state{secret=Secret}=StateData) ->
     ID=get_id(Bin),
@@ -82,7 +99,6 @@ init(#plug_state{host=Host, port=Port, vhost=Vhost}=State) -> %% gen_fsm callbac
     'NORMAL'({send, A}, StateData);
 
 'NORMAL'({tcp, Bin}, StateData) ->
-    %%io:format("NORMAL TCP: ~s\n", [Bin]),
     case (catch string_to_element(Bin)) of
 	List when is_list(List) ->
 	    lists:foreach(fun(E) -> io:format("handle ~w\n", [(catch handle_xml(E, StateData))]) end, List);
@@ -119,13 +135,16 @@ handle_info({tcp, Socket, Bin}, StateName, #plug_state{socket=Socket, tcp_buf=Bu
     Data=Buf++Bin,
     case (catch string_to_element(Data)) of
 	[{xmlelement, _name, _attr, _els}|_] ->
-	    %%io:format("!--------!! ~w\n", [Data]),
+	    %%io:format("!--------!! ~s\n", [Data]),
 	    ?MODULE:StateName({tcp, Data}, StateData#plug_state{tcp_buf=""});
 	Error ->
-	    %%io:format("!------------!! ~w\n", [Error]),
+	    %%io:format("handle_info tcp ~w\n", [Error]),
 	    {next_state, StateName, StateData#plug_state{tcp_buf=Data}}
     end;
 
+handle_info({tcp_closed,Socket}, StateName, StateData) ->
+    {next_state, 'WAIT FOR SOCKET', StateData, 1000};
+    
 handle_info(Any, StateName, StateData) ->
     io:format("!!!1! ~w\n", [{Any, StateName, StateData}]),
     {next_state, StateName, StateData}.
@@ -154,27 +173,33 @@ user_quit(Args) ->
     Args.
 
 chat_msg(Args) ->
-    io:format("------------------------======================--------------------"),
-
-    Sid=eadc_utils:get_val(sid, Args),
-    Msg=eadc_utils:get_val(msg, Args),
-    Client=eadc_client_fsm:client_get(Sid),
-    Nick=Client#client.nick,
-    gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg}),
-    Args.
+    case eadc_utils:get_val(pids, Args) of
+	[] -> %some plugin already hooked this message
+	    Args;
+	_ ->
+	    io:format("------------------------======================--------------------"),
+	    Sid=eadc_utils:get_val(sid, Args),
+	    Msg=eadc_utils:get_val(msg, Args),
+	    Client=eadc_client_fsm:client_get(Sid),
+	    Nick=Client#client.nick,
+	    gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg}),
+	    Args
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 %% dfjvnkdfvfdf
 %%%%%%%%%%%%%%%%
 
 handle_xml({xmlelement, Name, Attrs, Els}, State) ->
+    ?DEBUG(error, "!!!  handle xml !!!!!", ""),
+    Conf=State#plug_state.conf,
+    Host=State#plug_state.vhost,
     case Name of
 	"message" ->
-	    Conf=State#plug_state.conf,
-	    Host=State#plug_state.vhost,
 	    From=eadc_utils:get_val("from", Attrs),
 	    From_Nick=lists:nthtail(string:len(Conf)+1, From),
-	    if From_Nick=="jlarky" ->
+	    {fclient, [From_Client]}={fclient, eadc_user:client_find(#client{nick=From_Nick, _='_'})},
+	    if (From_Client#client.pid == jabber_gate) ->
 		    To=eadc_utils:get_val("to", Attrs),
 		    {to, [To_Nick, Host]}={to, string:tokens(To, "@")},
 		    {client, [Client]}={client, eadc_user:client_find(#client{nick=To_Nick, _='_'})},
@@ -189,8 +214,9 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 							 ""
 						 end end, [], Els),
 		    To_Send=lists:flatten(lists:map(fun(E) -> utf8(E) end, Msg)),
-		    {fclient, [From_Client]}={fclient, eadc_user:client_find(#client{nick=From_Nick, _='_'})},
+		    
 		    From_Sid=From_Client#client.sid,
+		    %%io:format("!!!!!! ~w", [Pid]),
 		    eadc_utils:send_to_pid(Pid, {args, ["BMSG", atom_to_list(From_Sid), To_Send]}),
 		    %%io:format("handle_xml !!!!! ~w\n", [{message, From_Nick, To_Nick, Client#client.sid, Els, To_Send}]),
 		    ok;
@@ -199,33 +225,33 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 	    end,
 	    ok;
 	"presence" ->
-	    Conf=State#plug_state.conf,
-	    Host=State#plug_state.vhost,
 	    From=eadc_utils:get_val("from", Attrs),
 	    From_Nick=lists:nthtail(string:len(Conf)+1, From),
-	    if From_Nick=="jlarky" -> %% is_jabber_client
+	    io:format("\n!!!! \n!!!! ~s\n", [From_Nick]),
+	    Client = case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
+			 [X] -> X;
+			 [] -> #client{}
+		     end,
+	    
+	    if (not is_pid(Client#client.pid)) -> %% is_jabber_client
 		    case eadc_utils:get_val("type", Attrs) of
 			"unavailable" -> %% do logout
-			    case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
-				[Client] when is_record(Client, client) -> %% jabber client in DC contact-list
 				    Sid=Client#client.sid,
 				    eadc_client_fsm:client_delete(Sid),
 				    eadc_utils:broadcast({string, "IQUI "++atom_to_list(Sid)}),
 				    io:format("LOGOUT ~s\n", [atom_to_list(Sid)]),
 				    (catch eadc_utils:do_logout() );
-				_user_not_found ->
-				    do_nothing
-			    end;
 			_other -> %% do login
 			    case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
 				[Client] when is_record(Client, client) -> %% already logged
-				    already_logged;
+				    ?DEBUG(error, "~s\n", [already_logged]);
 				_ ->
+				    ?DEBUG(error, "~s\n", [login]),
 				    Cid=eadc_client_fsm:get_unical_cid(eadc_utils:random_base32(39)),
 				    Sid=eadc_client_fsm:get_unical_SID(),
 				    Inf="BINF "++Sid++" ID"++Cid++" NI"++From_Nick++" DE"++Conf,
 				    eadc_utils:broadcast({string, Inf}),
-				    eadc_client_fsm:client_write(#client{cid=Cid, sid=list_to_atom(Sid), nick=From_Nick, inf=Inf, pid=undefined}),
+				    eadc_client_fsm:client_write(#client{cid=Cid, sid=list_to_atom(Sid), nick=From_Nick, inf=Inf, pid=jabber_gate}),
 				    ok
 			    end,
 			    ok
@@ -236,8 +262,22 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 	    end,
 	    io:format("handle_xml !!!!! ~w\n", [{presence, From_Nick, Els}]),
 	    ok;
+	"iq" ->
+	    To=eadc_utils:get_val("to", Attrs),
+	    From=eadc_utils:get_val("from", Attrs),
+	    Type=eadc_utils:get_val("type", Attrs),
+	    Id=eadc_utils:get_val("id", Attrs),
+	    if ( (To==Host) and (Type == "get")) ->
+		    io:format("handle_xml iq  :\n~s\n", [lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))]),
+		    gen_fsm:send_event(jabber_server, {send, "<iq from='"++Host++"' to='"++From++"' type='result' id='"++Id++"'>
+<query xmlns='http://jabber.org/protocol/disco#info'>
+<identity category='gateway' type='dc' name='DC gate' /></query></iq>"});
+	       true ->
+		    io:format("handle_xml iq Other !!!!! :\n~s\n", [lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))])
+	    end,
+	    ok;
 	Other ->
-	    io:format("handle_xml Other !!!!! ~w\n", [Other]),
+	    io:format("handle_xml Other !!!!! ~s:\n~s\n", [Other,lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))]),
 	    ok
     end.
 	    
@@ -256,7 +296,7 @@ string_to_element([]) ->
     [];
 string_to_element(String) ->
     %%io:format("string_to_element ~s\n", [String]),
-    {Xml, Tail}=xmerl_scan:string(String, [{validation, false}]),
+    {Xml, Tail}=xmerl_scan:string(String, [{validation, false},{quiet, true}]),
     [parse_(Xml)]++string_to_element(Tail).
 
 parse_(Res) ->
@@ -265,7 +305,7 @@ parse_(Res) ->
 	 _xmlNamespace,
 	 _,_num,
 	 XmlAttribute, InnerXML,
-	 [],_some_path,undeclared}->
+	 _lang,_some_path,undeclared}->
 	    if InnerXML /= [] ->
 		    Els=lists:map(fun(Xml) -> parse_(Xml) end, InnerXML);
 	       true ->
@@ -283,7 +323,7 @@ parse_attr(Attrs) ->
 parse_attr([], Out) ->
     lists:reverse(Out);
 parse_attr([XmlAttribute| Tail], Out) ->
-    {xmlAttribute,Name,[],[],[],[],_num,[],Val,false}=XmlAttribute,
+    {xmlAttribute,Name,_,_,_hz,_,_num,_, Val,false}=XmlAttribute,
     parse_attr(Tail, [{atom_to_list(Name), Val}|Out]).
 
 utf8(N) when N < 256->

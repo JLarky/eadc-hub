@@ -428,7 +428,7 @@ client_command(Header, Command, Args, Pids, State) ->
 			Args2=get_val(par, Args),
 			Sid=list_to_atom(get_val(my_sid, Args)),
 			?DEBUG(debud, "client_command: ctm hook ~w", [Pids]),
-			eadc_plugin:hook(ctm, [{pid,self()},{args,Args2},{sid,Sid},
+			eadc_plugin:hook(ctm, [{pid,self()},{args,Args2},{sid,Sid},{client,Client},
 					       {data,Data},{pids,Pids},{state, State}]);
 		    false ->
 			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
@@ -533,11 +533,12 @@ inf_update(Inf, Inf_update) ->
 
 user_login(Sid,Nick,Cid,Args) ->
     My_Pid=self(),Inf=get_val(inf, Args),Login=get_val(login, Args),
+    Addr=get_val(addr, Args),
     {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
-    Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, inf=Inf, login=Login},
+    Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, inf=Inf, login=Login, addr=Addr},
 
-    lists:foreach(fun(#client{inf=Inf}) ->
-			     eadc_utils:send_to_pid(My_Pid, Inf)
+    lists:foreach(fun(#client{inf=CInf}) ->
+			     eadc_utils:send_to_pid(My_Pid, CInf)
 		  end, client_all()),
     client_write(Client),
     eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),

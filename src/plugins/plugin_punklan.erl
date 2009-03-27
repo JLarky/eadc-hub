@@ -10,7 +10,7 @@
 -include("eadc.hrl").
 -include("eadc_plugin.hrl").
 -include("plugin_punklan.hrl").
- 
+
 -export([ctm/1, chat_msg/1]). %% some hook that you want to catch
  
 chat_msg(Args) ->
@@ -35,18 +35,18 @@ chat_msg(Args) ->
     end.
  
 ctm(Args) ->
-    ?GET_VAL(pids, [Pid]=_Pids),
-    ?GET_VAL(state, State_f),
-    ?GET_VAL(client, Client),
-    State_t=gen_fsm:sync_send_all_state_event(Pid, get_state, 10000),
+    [Pid]=eadc_utils:get_val(pids, Args),
+    %%State_f=eadc_utils:get_val(state, Args),
+    Client=eadc_utils:get_val(client, Args),
     Nick_f=Client#client.nick,
-    Client_t=eadc_utils:client_get(State_t#state.sid),
+
+    [Client_t]=eadc_user:client_find(#client{pid=Pid, _='_'}),
     Nick_t=Client_t#client.nick,
-    Direction=lists:concat([whois(State_f#state.addr), "\\sи\\s", whois(State_t#state.addr)]),
+    Direction=lists:concat([whois(Client_t#client.addr), "\\sи\\s", whois(Client#client.addr)]),
  
     %% send message to sender
     eadc_utils:info_to_pid(self(), io_lib:format("~s только что попробовал приконнектиться к ~s. (~s)",[Nick_f, Nick_t,Direction])),
-    case {whois(State_f#state.addr), whois(State_t#state.addr)} of
+    case {whois(Client_t#client.addr), whois(Client#client.addr)} of
 	{F, T} when (F == inet) or (T == inet) ->
 	    eadc_utils:info_to_pid(self(), "Но нифига из этого не выйдет."),
 	    lists:keyreplace(pids, 1, Args, {pids, []});
