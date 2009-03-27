@@ -137,12 +137,12 @@ handle_info({tcp, Socket, Bin}, StateName, #plug_state{socket=Socket, tcp_buf=Bu
 	[{xmlelement, _name, _attr, _els}|_] ->
 	    %%io:format("!--------!! ~s\n", [Data]),
 	    ?MODULE:StateName({tcp, Data}, StateData#plug_state{tcp_buf=""});
-	Error ->
+	_Error ->
 	    %%io:format("handle_info tcp ~w\n", [Error]),
 	    {next_state, StateName, StateData#plug_state{tcp_buf=Data}}
     end;
 
-handle_info({tcp_closed,Socket}, StateName, StateData) ->
+handle_info({tcp_closed,_Socket}, _StateName, StateData) ->
     {next_state, 'WAIT FOR SOCKET', StateData, 1000};
     
 handle_info(Any, StateName, StateData) ->
@@ -183,7 +183,7 @@ chat_msg(Args) ->
 	    Client=eadc_client_fsm:client_get(Sid),
 	    Nick=Client#client.nick,
 	    gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg}),
-	    Args
+	    eadc_utils:set_val(pids, [], Args)
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -194,38 +194,33 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
     ?DEBUG(error, "!!!  handle xml !!!!!", ""),
     Conf=State#plug_state.conf,
     Host=State#plug_state.vhost,
+    From=utf8:to_utf8(eadc_utils:get_val("from", Attrs)),
     case Name of
 	"message" ->
-	    From=eadc_utils:get_val("from", Attrs),
 	    From_Nick=lists:nthtail(string:len(Conf)+1, From),
-	    {fclient, [From_Client]}={fclient, eadc_user:client_find(#client{nick=From_Nick, _='_'})},
-	    if (From_Client#client.pid == jabber_gate) ->
-		    To=eadc_utils:get_val("to", Attrs),
-		    {to, [To_Nick, Host]}={to, string:tokens(To, "@")},
-		    {client, [Client]}={client, eadc_user:client_find(#client{nick=To_Nick, _='_'})},
-		    Pid=Client#client.pid,
-		    %%eadc_utils:send_to_pid(Pid, {args, ["BMSG", atom_to_list( Client#client.sid), "sadsdfvfds"]}),
-		    Msg=lists:foldl(fun({xmlelement, Name_, _Attrs_, Els_}, Acc) ->
-					    Acc++case Name_ of
-						     "body" ->
-							 [{xmlcdata,Msg_}]=Els_,
-							 Msg_;
-						     _ ->
-							 ""
-						 end end, [], Els),
-		    To_Send=lists:flatten(lists:map(fun(E) -> utf8(E) end, Msg)),
-		    
-		    From_Sid=From_Client#client.sid,
-		    %%io:format("!!!!!! ~w", [Pid]),
-		    eadc_utils:send_to_pid(Pid, {args, ["BMSG", atom_to_list(From_Sid), To_Send]}),
-		    %%io:format("handle_xml !!!!! ~w\n", [{message, From_Nick, To_Nick, Client#client.sid, Els, To_Send}]),
-		    ok;
-	       true ->
-		    msgs_from_dc
-	    end,
+	    {fclient,From_Nick, [From_Client]}={fclient, From_Nick, eadc_user:client_find(#client{nick=From_Nick, _='_'})},
+	    
+	    To=utf8:to_utf8(eadc_utils:get_val("to", Attrs)),
+	    {to, [To_Nick, Host]}={to, string:tokens(To, "@")},
+	    {client,To_Nick, [Client]}={client, To_Nick, eadc_user:client_find(#client{nick=To_Nick, _='_'})},
+	    Pid=Client#client.pid,
+	    %%eadc_utils:send_to_pid(Pid, {args, ["BMSG", atom_to_list( Client#client.sid), "sadsdfvfds"]}),
+	    Msg=lists:foldl(fun({xmlelement, Name_, _Attrs_, Els_}, Acc) ->
+				    Acc++case Name_ of
+					     "body" ->
+						 [{xmlcdata,Msg_}]=Els_,
+						 Msg_;
+					     _ ->
+						 ""
+					 end end, [], Els),
+	    To_Send=utf8:to_utf8(Msg),
+	    
+	    From_Sid=From_Client#client.sid,
+	    %%io:format("!!!!!! ~w", [Pid]),
+	    eadc_utils:send_to_pid(Pid, {args, ["BMSG", atom_to_list(From_Sid), To_Send]}),
+	    %%io:format("handle_xml !!!!! ~w\n", [{message, From_Nick, To_Nick, Client#client.sid, Els, To_Send}]),
 	    ok;
 	"presence" ->
-	    From=eadc_utils:get_val("from", Attrs),
 	    From_Nick=lists:nthtail(string:len(Conf)+1, From),
 	    io:format("\n!!!! \n!!!! ~s\n", [From_Nick]),
 	    Client = case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
@@ -233,14 +228,15 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 			 [] -> #client{}
 		     end,
 	    
-	    if (not is_pid(Client#client.pid)) -> %% is_jabber_client
+	    case lists:prefix(Host, From) of
+		false -> %% not dc client
 		    case eadc_utils:get_val("type", Attrs) of
 			"unavailable" -> %% do logout
-				    Sid=Client#client.sid,
-				    eadc_client_fsm:client_delete(Sid),
-				    eadc_utils:broadcast({string, "IQUI "++atom_to_list(Sid)}),
-				    io:format("LOGOUT ~s\n", [atom_to_list(Sid)]),
-				    (catch eadc_utils:do_logout() );
+			    Sid=Client#client.sid,
+			    eadc_client_fsm:client_delete(Sid),
+			    eadc_utils:broadcast({string, "IQUI "++atom_to_list(Sid)}),
+			    io:format("LOGOUT ~s\n", [atom_to_list(Sid)]),
+			    ok;
 			_other -> %% do login
 			    case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
 				[Client] when is_record(Client, client) -> %% already logged
@@ -257,14 +253,13 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 			    ok
 		    end,
 		    ok;
-	       true ->
+		true ->
 		    ok
 	    end,
 	    io:format("handle_xml !!!!! ~w\n", [{presence, From_Nick, Els}]),
 	    ok;
 	"iq" ->
 	    To=eadc_utils:get_val("to", Attrs),
-	    From=eadc_utils:get_val("from", Attrs),
 	    Type=eadc_utils:get_val("type", Attrs),
 	    Id=eadc_utils:get_val("id", Attrs),
 	    if ( (To==Host) and (Type == "get")) ->
@@ -325,9 +320,3 @@ parse_attr([], Out) ->
 parse_attr([XmlAttribute| Tail], Out) ->
     {xmlAttribute,Name,_,_,_hz,_,_num,_, Val,false}=XmlAttribute,
     parse_attr(Tail, [{atom_to_list(Name), Val}|Out]).
-
-utf8(N) when N < 256->
-    N;
-utf8(N) ->
-    <<0:5,A:5,B:6>>=list_to_binary([N div 256, N rem 256]),
-    binary_to_list(<<6:3,A:5,2:2,B:6>>).
