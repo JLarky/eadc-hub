@@ -24,7 +24,7 @@
 %% DEBUG
 -export([test/1, get_pid_by_sid/1, get_unical_cid/1,get_unical_SID/0]).
 
--export([client_get/1, client_write/1, client_delete/1]).
+-export([client_get/1, client_write/1, client_delete/1,client_all/0]).
 
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").

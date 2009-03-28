@@ -79,6 +79,9 @@ connect(Host, Port, Vhost) ->
     io:format("HANDSHAKE ~s ~w\n", [Bin, StateData]),
     case Bin of
 	"<handshake/>" ->
+	    lists:foreach(fun(#client{nick=Nick}) ->
+				  gen_fsm:send_event(jabber_server, {user_login, Nick})
+			  end, eadc_client_fsm:client_all()),
 	    {next_state, 'NORMAL', StateData};
 	Error ->
 	    ?DEBUG(error, "JABBER PLUGIN: WRONG PASSWORD: ~w\n", [Error]),
@@ -95,13 +98,17 @@ connect(Host, Port, Vhost) ->
 'NORMAL'({chat_msg, Nick, Msg}, #plug_state{conf=Conf, vhost=Host}=StateData) ->
     Body={xmlelement, "body", [], [{xmlcdata, Msg}]},
     A=xml:element_to_string({xmlelement, "message", [{"from", Nick++"@"++Host}, {"to", Conf},
-						    {"type", "groupchat"}], [Body]}),
+						     {"type", "groupchat"}], [Body]}),
     'NORMAL'({send, A}, StateData);
 
 'NORMAL'({tcp, Bin}, StateData) ->
     case (catch string_to_element(Bin)) of
 	List when is_list(List) ->
-	    lists:foreach(fun(E) -> io:format("handle ~w\n", [(catch handle_xml(E, StateData))]) end, List);
+	    lists:foreach(
+	      fun(E) -> case (catch handle_xml(E, StateData)) of
+			    ok -> ok;
+			    Error -> io:format("handle ~s \nwith error ~w\n", [utf8:to_utf8(lists:flatten(xml:element_to_string(E))), Error])
+			end end, List);
 	Error ->
 	    io:format("NORMAL unknown ~w\n", [Error])
     end,
@@ -177,11 +184,11 @@ chat_msg(Args) ->
 	[] -> %some plugin already hooked this message
 	    Args;
 	_ ->
-	    io:format("------------------------======================--------------------"),
 	    Sid=eadc_utils:get_val(sid, Args),
 	    Msg=eadc_utils:get_val(msg, Args),
 	    Client=eadc_client_fsm:client_get(Sid),
 	    Nick=Client#client.nick,
+	    io:format("------------------------======================-------------------- ~w\n",[{chat_msg, Nick, Msg}]),
 	    gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg}),
 	    eadc_utils:set_val(pids, [], Args)
     end.
@@ -197,10 +204,12 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
     From=utf8:to_utf8(eadc_utils:get_val("from", Attrs)),
     case Name of
 	"message" ->
-	    From_Nick=lists:nthtail(string:len(Conf)+1, From),
+	    To=utf8:to_utf8(eadc_utils:get_val("to", Attrs)),
+
+	    {from_nick, From_Nick}={from_nick,lists:nthtail(string:len(Conf)+1, From)},
 	    {fclient,From_Nick, [From_Client]}={fclient, From_Nick, eadc_user:client_find(#client{nick=From_Nick, _='_'})},
 	    
-	    To=utf8:to_utf8(eadc_utils:get_val("to", Attrs)),
+
 	    {to, [To_Nick, Host]}={to, string:tokens(To, "@")},
 	    {client,To_Nick, [Client]}={client, To_Nick, eadc_user:client_find(#client{nick=To_Nick, _='_'})},
 	    Pid=Client#client.pid,
@@ -221,7 +230,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 	    %%io:format("handle_xml !!!!! ~w\n", [{message, From_Nick, To_Nick, Client#client.sid, Els, To_Send}]),
 	    ok;
 	"presence" ->
-	    From_Nick=lists:nthtail(string:len(Conf)+1, From),
+	    {from_presence,From_Nick}={from_presence,lists:nthtail(string:len(Conf)+1, From)},
 	    io:format("\n!!!! \n!!!! ~s\n", [From_Nick]),
 	    Client = case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
 			 [X] -> X;
@@ -268,7 +277,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 <query xmlns='http://jabber.org/protocol/disco#info'>
 <identity category='gateway' type='dc' name='DC gate' /></query></iq>"});
 	       true ->
-		    io:format("handle_xml iq Other !!!!! :\n~s\n", [lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))])
+		    io:format("handle_xml iq Other !!!!! :\n~s\n", [utf8:to_utf8(lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els})))])
 	    end,
 	    ok;
 	Other ->
