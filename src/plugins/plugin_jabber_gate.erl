@@ -169,8 +169,14 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 
 user_login(Args) ->
     Nick=eadc_utils:get_val(nick, Args),
-    gen_fsm:send_event(jabber_server, {user_login, Nick}),
-    Args.
+    case eadc_user:client_find(#client{nick=Nick, _='_'}) of
+	[] -> % ok
+	    gen_fsm:send_event(jabber_server, {user_login, Nick}),
+	    Args;
+	[_|_] -> % nick is used
+	    gen_fsm:send_event(self(), {kill, "Nick in use"}),
+	    Args
+    end.
 
 user_quit(Args) ->
     Sid=eadc_utils:get_val(sid, Args),

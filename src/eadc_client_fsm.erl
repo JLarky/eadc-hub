@@ -98,6 +98,7 @@ init([]) ->
     {list, List} = eadc_utils:convert({string, Data}),
     case List of
 	["BINF", SID | _] ->
+	    gen_tcp:send(Socket, "IINF CT32 VEEADC NIHub DE \n"),
 	    case list_to_atom(SID) == Sid of
 		false ->
 		    gen_tcp:send(Socket,"ISTA 240 "++eadc_utils:quote("SID is not correct")++"\n"),
@@ -143,8 +144,12 @@ init([]) ->
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
 			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
 			false ->
-			    user_login(Sid,Nick,Cid,Args),
-			    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT}
+			    case user_login(Sid,Nick,Cid,Args) of %% user_login
+				Client when is_record(Client, client) ->
+				    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
+				Why ->
+				    {stop, Why, New_State}
+			    end
 		    end
 			    
 	    end;
@@ -173,18 +178,23 @@ init([]) ->
 	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", [Login,Addr,{Pass,C}]),
 	    case C==Pass of
 		true ->
-		    Client=Func(), %% user_login
-		    if (Account#account.class > 2) ->
-			    Inf_update=["CT4"];
-		       true ->
-			    Inf_update=["CT2"]
-		    end,
-		    New_Inf_full=inf_update(Client#client.inf, Inf_update),
-		    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
-
-		    eadc_utils:broadcast({string, New_Inf_to_send}),
-		    set_client_login(Login),
-		    {next_state, 'NORMAL STAGE', State};
+		    case Func() of %% user_login
+			Client when is_record(Client, client) ->
+			    if (Account#account.class > 2) ->
+				    Inf_update=["CT4"];
+			       true ->
+				    Inf_update=["CT2"]
+			    end,
+			    New_Inf_full=inf_update(Client#client.inf, Inf_update),
+			    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
+			    
+			    eadc_utils:broadcast({string, New_Inf_to_send}),
+			    set_client_login(Login),
+			    {next_state, 'NORMAL STAGE', State};
+			Why ->
+			    io:format("kill"),
+			    {stop, Why, State}
+		    end;
 		false ->
 		    case (catch Tries_left-1) of
 			I when is_integer(I) and (I > 0) ->
@@ -241,6 +251,11 @@ init([]) ->
 
 'NORMAL STAGE'(kill_your_self, State) ->
     ?DEBUG(error, "~w killed by self", [self()]),
+    {stop, normal, State};
+
+'NORMAL STAGE'({kill, Why}, State) ->
+    send_to_socket("ISTA 100 "++eadc_utils:quote(Why), State),
+    ?DEBUG(error, "~w killed: ~s ~w", [self(), Why]),
     {stop, normal, State};
 
 'NORMAL STAGE'(Other, State) ->
@@ -321,7 +336,12 @@ handle_info(Info, StateName, StateData) ->
 %% Returns: any
 %% @private
 %%-------------------------------------------------------------------------
-terminate(_Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
+terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
+    case Reason of
+	String when is_list(String) ->
+	    (catch gen_tcp:send(Socket, "ISTA 123 "++eadc_utils:quote(Reason)++"\n"));
+	_ -> ok
+    end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
     String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
     eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{pids,[]},
@@ -535,14 +555,19 @@ user_login(Sid,Nick,Cid,Args) ->
     My_Pid=self(),Inf=get_val(inf, Args),Login=get_val(login, Args),
     Addr=get_val(addr, Args),
     {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
-    Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, inf=Inf, login=Login, addr=Addr},
-
-    lists:foreach(fun(#client{inf=CInf}) ->
-			     eadc_utils:send_to_pid(My_Pid, CInf)
-		  end, client_all()),
-    client_write(Client),
-    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
-    Client.
+    case Pids_to_inform of
+	[] -> %% bad user, don't login him
+	    Data_to_send;
+	_ ->
+	    Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, inf=Inf, login=Login, addr=Addr},
+	    
+	    lists:foreach(fun(#client{inf=CInf}) ->
+				  eadc_utils:send_to_pid(My_Pid, CInf)
+			  end, client_all()),
+	    client_write(Client),
+	    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
+	    Client
+    end.
 
 need_authority(Nick, Cid) ->
     MatchHead = #account{cid='$1', nick='$2', _='_'},
