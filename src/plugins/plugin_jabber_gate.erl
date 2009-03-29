@@ -27,7 +27,8 @@
 	  conf,
 	  secret,
 	  socket,
-	  tcp_buf=""
+	  tcp_buf="",
+	  xml_buf=""
 	 }).
 
 -export([user_login/1,user_quit/1,chat_msg/1]).
@@ -75,10 +76,10 @@ connect(Host, Port, Vhost) ->
     io:format("!!!!!!!!!1!!!1!!1! ~w\n", [{Any, State}]),
     {next_state, 'WAIT FOR REPLY', State}.
 
-'WAIT FOR HANDSHAKE'({tcp, Bin}, StateData) ->
-    io:format("HANDSHAKE ~s ~w\n", [Bin, StateData]),
-    case Bin of
-	"<handshake/>" ->
+'WAIT FOR HANDSHAKE'({handle_xml, Xml}, StateData) ->
+    io:format("HANDSHAKE ~p ~w\n", [Xml, StateData]),
+    case Xml of
+	{xmlelement,"handshake",[],[]} ->
 	    lists:foreach(fun(#client{nick=Nick}) ->
 				  gen_fsm:send_event(jabber_server, {user_login, Nick})
 			  end, eadc_client_fsm:client_all()),
@@ -101,17 +102,9 @@ connect(Host, Port, Vhost) ->
 						     {"type", "groupchat"}], [Body]}),
     'NORMAL'({send, A}, StateData);
 
-'NORMAL'({tcp, Bin}, StateData) ->
-    case (catch string_to_element(Bin)) of
-	List when is_list(List) ->
-	    lists:foreach(
-	      fun(E) -> case (catch handle_xml(E, StateData)) of
-			    ok -> ok;
-			    Error -> io:format("handle ~s \nwith error ~w\n", [utf8:to_utf8(lists:flatten(xml:element_to_string(E))), Error])
-			end end, List);
-	Error ->
-	    io:format("NORMAL unknown ~w\n", [Error])
-    end,
+'NORMAL'({handle_xml, Xml}, StateData) ->
+    A=(catch handle_xml(Xml, StateData)),
+    io:format("handle ~s \nwith error ~w\n", [utf8:to_utf8(lists:flatten(xml:element_to_string(Xml))), A]),
     {next_state, 'NORMAL', StateData};
 'NORMAL'({send, Bin}, #plug_state{socket=Socket}=StateData) ->
     %%io:format("NORMAL send ~s\n", [Bin]),
@@ -133,20 +126,39 @@ handle_event(Event, StateName, StateData) ->
 handle_sync_event(Event, _From, StateName, StateData) ->
     {stop, {StateName, undefined_event, Event}, StateData}.
 
+bla([]) ->
+    [];
+bla(Arg) ->
+    case xml:string_to_element(Arg) of
+        {XmlElement, Tail} ->
+	    gen_fsm:send_event(jabber_server, {handle_xml, XmlElement}),
+	    bla(Tail);
+	{_StateName, {xmlelement, _Name, _Args, _Els}, [], _Acc} = A ->
+	    A
+    end.
+
 handle_info({tcp, Socket, Bin}, 'WAIT FOR REPLY', #plug_state{socket=Socket}=StateData) ->
     inet:setopts(StateData#plug_state.socket, [{active, once}]),
     ?MODULE:'WAIT FOR REPLY'({tcp, Bin}, StateData#plug_state{tcp_buf=""});
 
-handle_info({tcp, Socket, Bin}, StateName, #plug_state{socket=Socket, tcp_buf=Buf}=StateData) ->
+handle_info({tcp, Socket, Bin_u}, StateName, 
+	    #plug_state{socket=Socket, tcp_buf=Tcp_Buf, xml_buf=Buf}=StateData) ->
     inet:setopts(StateData#plug_state.socket, [{active, once}]),
-    Data=Buf++Bin,
-    case (catch string_to_element(Data)) of
-	[{xmlelement, _name, _attr, _els}|_] ->
-	    %%io:format("!--------!! ~s\n", [Data]),
-	    ?MODULE:StateName({tcp, Data}, StateData#plug_state{tcp_buf=""});
-	_Error ->
-	    %%io:format("handle_info tcp ~w\n", [Error]),
-	    {next_state, StateName, StateData#plug_state{tcp_buf=Data}}
+    io:format("0=== ~p\n", [Bin_u]),
+    Data=Tcp_Buf++Bin_u,
+    case (catch utf8:from_utf8(Data)) of
+	{'EXIT', _Error} ->
+	    {next_state, StateName, StateData#plug_state{tcp_buf=Data}};
+	Bin when is_list(Bin) ->
+	    io:format("1=== ~p\n", [Bin]),
+	    New_Buf=case Buf of
+			[] ->
+			    bla(Bin);
+			{XStateName, XmlElement, [], Acc} ->
+			    bla({XStateName, XmlElement, Bin, Acc})
+		    end,
+	    io:format("2=== ~p\n", [New_Buf]),
+	    {next_state, StateName, StateData#plug_state{xml_buf=New_Buf, tcp_buf=""}}
     end;
 
 handle_info({tcp_closed,_Socket}, _StateName, StateData) ->
@@ -228,7 +240,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 					     _ ->
 						 ""
 					 end end, [], Els),
-	    To_Send=utf8:to_utf8(Msg),
+	    To_Send=utf8:to_utf8(xml:uncrypt(Msg)),
 	    
 	    From_Sid=From_Client#client.sid,
 	    %%io:format("!!!!!! ~w", [Pid]),
@@ -301,37 +313,3 @@ get_id(String) ->
     {match,N, L}=regexp:match(String, " id=(.*) "),
     S=lists:nthtail(N+4, String),
     lists:sublist(S, L-7).
-
-string_to_element([]) ->
-    [];
-string_to_element(String) ->
-    %%io:format("string_to_element ~s\n", [String]),
-    {Xml, Tail}=xmerl_scan:string(String, [{validation, false},{quiet, true}]),
-    [parse_(Xml)]++string_to_element(Tail).
-
-parse_(Res) ->
-    case Res of
-	{xmlElement,Element,Element,[],
-	 _xmlNamespace,
-	 _,_num,
-	 XmlAttribute, InnerXML,
-	 _lang,_some_path,undeclared}->
-	    if InnerXML /= [] ->
-		    Els=lists:map(fun(Xml) -> parse_(Xml) end, InnerXML);
-	       true ->
-		    Els=[]
-	    end,
-	    {xmlelement, atom_to_list(Element), parse_attr(XmlAttribute), Els};
-	{xmlText,_,_,[],Val,text} ->
-	    {xmlcdata, Val};
-	[] ->
-	    []
-    end.
-
-parse_attr(Attrs) ->
-    parse_attr(Attrs, []).
-parse_attr([], Out) ->
-    lists:reverse(Out);
-parse_attr([XmlAttribute| Tail], Out) ->
-    {xmlAttribute,Name,_,_,_hz,_,_num,_, Val,false}=XmlAttribute,
-    parse_attr(Tail, [{atom_to_list(Name), Val}|Out]).

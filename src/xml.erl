@@ -37,6 +37,8 @@
 	 get_path_s/2,
 	 replace_tag_attr/3]).
 
+-export([string_to_element/1,uncrypt/1]).
+
 %% Select at compile time how to escape characters in binary text
 %% nodes.
 %% Can be choosen with ./configure --enable-full-xml
@@ -83,6 +85,26 @@ crypt(S) when is_list(S) ->
      end || C <- S];
 crypt(S) when is_binary(S) ->
     crypt(binary_to_list(S)).
+
+uncrypt(S) when is_list(S) ->
+    uncrypt(S, "");
+uncrypt(S) when is_binary(S) ->
+    uncrypt(binary_to_list(S), "").
+
+uncrypt("", Out) ->
+    Out;
+uncrypt([$&,$a,$m,$p,$;|S], Out) ->
+    uncrypt(S, Out++[$&]);
+uncrypt([$&,$l,$t,$;|S], Out) ->
+    uncrypt(S, Out++[$<]);
+uncrypt([$&,$g,$t,$;|S], Out) ->
+    uncrypt(S, Out++[$>]);
+uncrypt([$&,$q,$u,$o,$t,$;|S], Out) ->
+    uncrypt(S, Out++[$"]);
+uncrypt([$&,$a,$p,$o,$s,$;|S], Out) ->
+    uncrypt(S, Out++[$']);
+uncrypt([H|S], Out) ->
+    uncrypt(S, Out++[H]).
 
 %% Make a cdata_binary depending on what characters it contains
 make_text_node(CData) ->
@@ -231,4 +253,56 @@ replace_tag_attr(Attr, Value, {xmlelement, Name, Attrs, Els}) ->
     Attrs2 = [{Attr, Value} | Attrs1],
     {xmlelement, Name, Attrs2, Els}.
 
+
+string_to_element({StateName, {xmlelement, Name, Args, Els}, Tail, Acc}) ->
+    string_to_element(StateName, {xmlelement, Name, Args, Els}, Tail, Acc);
+string_to_element([$< | Tail]) ->
+    string_to_element(tagname, {xmlelement, [], [], []}, Tail, _Acc=[]);
+string_to_element(String) when is_list(String) ->
+    {{xmlcdata, String}, ""}.
+
+string_to_element(StateName, {xmlelement, Name, Args, Els}, [], Acc) ->
+    {StateName, {xmlelement, Name, Args, Els}, [], Acc};
+string_to_element(tagname, {xmlelement, [], Args, Els}, [$\ |Tail], Acc) ->
+    string_to_element(attr_name, {xmlelement, Acc, Args, Els}, Tail, []);
+string_to_element(tagname, {xmlelement, [], Args, Els}, [$>|Tail], Acc) ->
+    EndTag=lists:reverse("</"++Acc++">"),L=length(EndTag)-1,
+    string_to_element(child, {xmlelement, Acc, Args, Els}, Tail, {EndTag, L, ""});
+string_to_element(tagname, {xmlelement, [], Args, Els}, [$/,$>|Tail], Acc) ->
+    {{xmlelement, Acc, Args, Els}, Tail};
+string_to_element(tagname, {xmlelement, [], [], []}, [H|Tail], Acc) ->
+    string_to_element(tagname, {xmlelement, [], [], []}, Tail, Acc++[H]);
+string_to_element(attr_name, {xmlelement, Name, Args, Els}, [$=,Delim|Tail], Acc) ->
+    string_to_element(attr_val, {xmlelement, Name, Args, Els}, Tail, {_Key=Acc, Delim, ""});
+string_to_element(attr_name, {xmlelement, Name, Args, Els}, [$/,$>|Tail], _Acc) ->
+    {{xmlelement, Name, Args, Els}, Tail};
+%%string_to_element(attr_val, {xmlelement, Name, Args, Els}, Tail, {_Key=Acc, Delim, ""});
+string_to_element(attr_name, {xmlelement, Name, Args, Els}, [H|Tail], Acc) ->
+    string_to_element(attr_name, {xmlelement, Name, Args, Els}, Tail, Acc++[H]);
+string_to_element(attr_val, {xmlelement, Name, Args, Els}, [Delim|Tail], {Key, Delim, Acc}) ->
+    string_to_element(attr, {xmlelement, Name, Args++[{Key, Acc}], Els}, Tail, "");
+string_to_element(attr_val, {xmlelement, Name, Args, Els}, [H|Tail], {Key, Delim, Acc}) ->
+    string_to_element(attr_val, {xmlelement, Name, Args, Els}, Tail, {Key, Delim, Acc++[H]});
+string_to_element(attr, {xmlelement, Name, Args, Els}, [$\ |Tail], "") ->
+    string_to_element(attr_name, {xmlelement, Name, Args, Els}, Tail, []);
+string_to_element(attr, {xmlelement, Name, Args, Els}, [$>|Tail], "") ->
+    EndTag=lists:reverse("</"++Name++">"),L=length(EndTag)-1,
+    string_to_element(child, {xmlelement, Name, Args, Els}, Tail, {EndTag,L,""});
+string_to_element(attr, {xmlelement, Name, Args, Els}, [$/,$>|Tail], "") ->
+    {{xmlelement, Name, Args, Els}, Tail};
+string_to_element(child, {xmlelement, Name, Args, Els}, [H|Tail], {EndTag,L,Acc}) ->
+    New_Acc=[H|lists:sublist(Acc, L)],
+    if New_Acc==EndTag ->
+	    New_Els=lists:sublist(Els, length(Els)-L),
+	    {{xmlelement, Name, Args, string_to_elements(New_Els, [])}, Tail};
+	    %%{{xmlelement, Name, Args, New_Els}, Tail};
+       true ->
+	    string_to_element(child, {xmlelement, Name, Args, Els++[H]}, Tail, {EndTag,L,New_Acc})
+    end.
+
+string_to_elements([], Acc) ->
+    Acc;
+string_to_elements(String, Acc) ->
+    {Element, Tail}=string_to_element(String),
+    string_to_elements(Tail, Acc++[Element]).
 
