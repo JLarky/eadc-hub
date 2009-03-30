@@ -11,8 +11,13 @@
 -include("eadc_plugin.hrl").
 -include("plugin_punklan.hrl").
 
+-export([init/0,terminate/0]).
+
 -export([ctm/1, chat_msg/1]). %% some hook that you want to catch
- 
+
+init() -> ok.
+terminate() -> ok.
+
 chat_msg(Args) ->
     ?GET_VAL(msg, Msg),
     case Msg of

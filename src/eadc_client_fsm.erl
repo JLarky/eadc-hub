@@ -325,6 +325,9 @@ handle_info({tcp_error,Socket,etimedout}, _StateName,
 handle_info({master, Data}, StateName, StateData) ->
     ?MODULE:StateName({master, Data}, StateData);
 
+handle_info({'EXIT',Pid, Reason}, StateName, StateData) ->
+    ?DEBUG(error, "this guy ~w just die: ~w\n", [Pid, Reason]),
+    {next_state, StateName, StateData};    
 handle_info(Info, StateName, StateData) ->
     ?DEBUG(error, "Unknown info ~w\n", [Info]),
     {noreply, StateName, StateData}.

@@ -18,6 +18,14 @@
 		       _ -> ok
 		   end).
 
+-export([init/0,terminate/0]).
+
+init() ->
+     ok.
+terminate() ->
+     ok.
+
+
 chat_msg(Args) ->
     ?DEBUG(debug, "plugin 10 lines === ~w", [Args]),
     ?ETS_CHECK,

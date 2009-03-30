@@ -33,7 +33,16 @@
 
 -export([user_login/1,user_quit/1,chat_msg/1]).
 
+-export([init/0,terminate/0]).
+
+init() -> init(""),
+	  ok.
+terminate() -> 
+    (catch gen_fsm:send_all_state_event(jabber_server, terminate)),
+    ok.
+
 init(Args) when is_list(Args) -> %% plugin hook
+    process_flag(trap_exit, true),
     Optins=eadc_app:get_app_env(jabber_bot, error),
     Host=eadc_utils:get_val(ejabberd_host, Optins),
     Port=eadc_utils:get_val(ejabberd_port, Optins),
@@ -58,8 +67,10 @@ init(State) when is_record(State, plug_state) ->
 	    ?DEBUG(error, "jabber-gate can't connect ~w\n", [Error]),
 	    %%timer:sleep(5000),
 	    {next_state, 'WAIT FOR SOCKET', State, 1000}
-    end.
-
+    end;
+'WAIT FOR SOCKET'(Any, State) ->
+    ?DEBUG(error, "jabber_gate unknown messge ~w\n", [{Any, State}]),
+    {next_state, 'WAIT FOR SOCKET', State}.
 connect(Host, Port, Vhost) ->
     {ok, Sock} = gen_tcp:connect(Host, Port, [{active, once}]),
     ok = gen_tcp:send(Sock, "<?xml version='1.0'?><stream:stream xmlns:stream='http://etherx.jabber.org/streams' "
@@ -120,6 +131,8 @@ connect(Host, Port, Vhost) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% gen_fms
 %%%%%%%%%%%%%%%%%%%%%%
+handle_event(terminate, _StateName, StateData) ->
+    {stop, normal, StateData};
 handle_event(Event, StateName, StateData) ->
     {stop, {StateName, undefined_event, Event}, StateData}.
 
@@ -163,7 +176,7 @@ handle_info({tcp, Socket, Bin_u}, StateName,
 
 handle_info({tcp_closed,_Socket}, _StateName, StateData) ->
     {next_state, 'WAIT FOR SOCKET', StateData, 1000};
-    
+
 handle_info(Any, StateName, StateData) ->
     io:format("!!!1! ~w\n", [{Any, StateName, StateData}]),
     {next_state, StateName, StateData}.
@@ -207,7 +220,7 @@ chat_msg(Args) ->
 	    Client=eadc_client_fsm:client_get(Sid),
 	    Nick=Client#client.nick,
 	    io:format("------------------------======================-------------------- ~w\n",[{chat_msg, Nick, Msg}]),
-	    gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg}),
+	    (catch gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg})),
 	    eadc_utils:set_val(pids, [], Args)
     end.
 

@@ -4,6 +4,8 @@
 %% hook
 -export([hook/2]).
 
+-export([get_plugins/0, set_plugins/1]).
+
 -define(PLUGINS, [plugin_bot, plugin_hub_merge, plugin_punklan, plugin_jabber_gate]).
 
 -include("eadc.hrl").
@@ -27,5 +29,15 @@ hook(Hook, Args) ->
 	      end
       end,    
     lists:foldl(F, Args, get_plugins()).
+
+%% @spec set_plugins() -> PluginList
+%% PluginList = [Plugin_module]
+%% @doc gets plugin lists
 get_plugins() ->
-    ?PLUGINS.
+    eadc_utils:get_option(plugins, allowed, ?PLUGINS).
+
+%% @spec set_plugins(PluginList) -> ok
+%% PluginList = [Plugin_module]
+%% @doc save plugin lists
+set_plugins(Plugins) when is_list(Plugins) ->
+    eadc_utils:set_option(plugins, allowed, Plugins).

@@ -9,6 +9,13 @@
 -include("eadc.hrl").
 -include("eadc_plugin.hrl").
 
+-export([init/0,terminate/0]).
+
+init() ->
+     ok.
+terminate() ->
+     {error, "This plugin can't be stopped"}.
+
 init(Args) ->
     Cid=eadc_client_fsm:get_unical_cid(eadc_utils:random_base32(39)),
     Sid=eadc_client_fsm:get_unical_SID(),
@@ -143,6 +150,37 @@ Admin's commands:
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
+	"plugin" ->
+	    {MName,F,M}=case Args of
+			    ["on", Name|_] ->
+				{list_to_atom(Name),init, "initialized."};
+			    ["off", Name|_] ->
+			      {list_to_atom(Name),terminate, "terminated"};
+			  _ ->
+			      eadc_utils:info_to_pid(self(), "Wrong parametrs."),
+			      {"","",""}
+		      end,
+	    case (catch MName:F()) of
+		{'EXIT',{undef,[{MName,F,[]}|_]}} ->
+		    eadc_utils:error_to_pid(self(), "Plugin "++atom_to_list(MName)
+					    ++" can't be "++M++".");
+		ok ->
+		    PL=eadc_plugin:get_plugins(),
+		    case F of
+			init ->
+			    eadc_plugin:set_plugins([MName|PL]);
+			terminate ->
+			    eadc_plugin:set_plugins(lists:delete(MName,PL))
+		    end,
+		    eadc_utils:info_to_pid(self(), "Plugin "++atom_to_list(MName)
+					   ++" have been "++M++".");
+		{error, Error} ->
+			    eadc_utils:info_to_pid(self(), lists:flatten(Error))
+	    end;
+	"pluginlist" ->
+	    PL=eadc_plugin:get_plugins(),
+	    Out=lists:foldl(fun(Pname, Acc) -> Acc++"\n"++atom_to_list(Pname) end,"",PL),
+	    eadc_utils:info_to_pid(self(), Out);
 	_ ->
 	    io:format("~s", [Command]),
 	    eadc_utils:info_to_pid(self(), "Unknown command"),
