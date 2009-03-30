@@ -344,8 +344,7 @@ terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
     end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
     String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
-    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{pids,[]},
-				 {data,[]},{state, State}]),
+    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{state, State}]),
     lists:foreach(fun(Pid) ->
 			  case Pid of
 			      PID when is_pid(PID) ->
@@ -439,10 +438,10 @@ client_command(Header, Command, Args, Pids, State) ->
 		New_Inf_full=inf_update(Client#client.inf, Inf_update),
 		client_write(Client#client{inf=New_Inf_full}),
 		New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
-
-		{Pids, New_Inf_to_send};
+		%% no any plugin
+		[{pids, Pids}, {data, New_Inf_to_send}];
 	    {'D','CTM'} ->
-		[Pid] = Pids,
+		{pid,[Pid]} = {pid,Pids},
 		case is_pid(Pid) of
 		    true ->
 			Args2=get_val(par, Args),
@@ -452,17 +451,17 @@ client_command(Header, Command, Args, Pids, State) ->
 					       {data,Data},{pids,Pids},{state, State}]);
 		    false ->
 			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
-			{[], Data} %% в том смысле что никому ничего мы теперь не пошлём
+			[{pids,[]}, {data,Data}] %% в том смысле что никому ничего мы теперь не пошлём
 		end;
 	    {_place, _holder} ->
-		{Pids, Data}
+		[{pids,Pids}, {data,Data}]
 	end,
     %%?DEBUG(debug, "client_command: ~w", [{Header, Command, Args, Pids, State}]),
-    Res.
+    {eadc_utils:get_val(pids, Res),eadc_utils:get_val(data, Res)}.
 
 
-%%%------------------------------------------------------------------------                                                                                            
-%%% Helping functions                                                                                            
+%%%------------------------------------------------------------------------
+%%% Helping functions
 %%%------------------------------------------------------------------------
 
 get_val(Key, Args) -> 
@@ -552,22 +551,20 @@ inf_update(Inf, Inf_update) ->
     "BINF"++eadc_utils:deparse_inf(New_Inf).
 
 user_login(Sid,Nick,Cid,Args) ->
-    My_Pid=self(),Inf=get_val(inf, Args),Login=get_val(login, Args),
-    Addr=get_val(addr, Args),
-    {Pids_to_inform, Data_to_send}=eadc_plugin:hook(user_login, Args),
-    case Pids_to_inform of
-	[] -> %% bad user, don't login him
-	    Data_to_send;
-	_ ->
-	    Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, inf=Inf, login=Login, addr=Addr},
-	    
-	    lists:foreach(fun(#client{inf=CInf}) ->
-				  eadc_utils:send_to_pid(My_Pid, CInf)
-			  end, client_all()),
-	    client_write(Client),
-	    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
-	    Client
-    end.
+    My_Pid=self(),Pre_Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, 
+				     inf=get_val(inf,Args),login=get_val(login,Args),
+				     addr=get_val(addr, Args)},
+    Hooked_Args=eadc_plugin:hook(user_login, [{client, Pre_Client}|Args]),
+    {pids, Pids_to_inform}={pids,get_val(pids, Hooked_Args)},
+    {data, Data_to_send}={data,get_val(data, Hooked_Args)},
+    {client, Client}={client,get_val(client, Hooked_Args)},
+    
+    lists:foreach(fun(#client{inf=CInf}) ->
+			  eadc_utils:send_to_pid(My_Pid, CInf)
+		  end, client_all()),
+    client_write(Client),
+    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
+    Client.
 
 need_authority(Nick, Cid) ->
     MatchHead = #account{cid='$1', nick='$2', _='_'},
