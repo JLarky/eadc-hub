@@ -44,7 +44,7 @@ chat_msg(Args) ->
 	    Args1=lists:keyreplace(msg, 1, Args, {msg, []}),
 	    lists:keyreplace(pids, 1, Args1, {pids, []});
 	_ -> 
-	    Args
+	    lists:keyreplace(msg, 1, Args, {msg, utf8:to_utf8(lists:sublist(utf8:from_utf8(Msg), 1024))})
     end.
 
 do_command([Command|Args], State, Client) ->
