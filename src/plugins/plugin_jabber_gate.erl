@@ -104,7 +104,7 @@ connect(Host, Port, Vhost) ->
 
 'NORMAL'({handle_xml, Xml}, StateData) ->
     A=(catch handle_xml(Xml, StateData)),
-    io:format("handle ~s \nwith error ~w\n", [utf8:to_utf8(lists:flatten(xml:element_to_string(Xml))), A]),
+    io:format("handle ~s \n~p\nwith error ~w\n", [utf8:to_utf8(lists:flatten(xml:element_to_string(Xml))),Xml, A]),
     {next_state, 'NORMAL', StateData};
 'NORMAL'({send, Bin}, #plug_state{socket=Socket}=StateData) ->
     %%io:format("NORMAL send ~s\n", [Bin]),

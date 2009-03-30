@@ -258,6 +258,8 @@ string_to_element({StateName, {xmlelement, Name, Args, Els}, Tail, Acc}) ->
     string_to_element(StateName, {xmlelement, Name, Args, Els}, Tail, Acc);
 string_to_element([$< | Tail]) ->
     string_to_element(tagname, {xmlelement, [], [], []}, Tail, _Acc=[]);
+string_to_element([$\n | Tail]) ->
+    string_to_element(Tail);
 string_to_element(String) when is_list(String) ->
     {{xmlcdata, String}, ""}.
 
@@ -294,7 +296,9 @@ string_to_element(child, {xmlelement, Name, Args, Els}, [H|Tail], {EndTag,L,Acc}
     New_Acc=[H|lists:sublist(Acc, L)],
     if New_Acc==EndTag ->
 	    New_Els=lists:sublist(Els, length(Els)-L),
-	    {{xmlelement, Name, Args, string_to_elements(New_Els, [])}, Tail};
+	    Elements=string_to_elements(New_Els, []),
+	    New_Elements=lists:delete({xmlcdata,[]}, Elements),
+	    {{xmlelement, Name, Args, New_Elements}, Tail};
 	    %%{{xmlelement, Name, Args, New_Els}, Tail};
        true ->
 	    string_to_element(child, {xmlelement, Name, Args, Els++[H]}, Tail, {EndTag,L,New_Acc})
