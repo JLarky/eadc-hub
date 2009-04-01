@@ -19,7 +19,7 @@
 	]).
 
 %% HELPING FUNCTIONS
--export([all_pids/0]).
+-export([all_pids/0,inf_update/2]).
 
 %% DEBUG
 -export([test/1, get_pid_by_sid/1, get_unical_cid/1,get_unical_SID/0]).

@@ -33,8 +33,10 @@ topic_to_pids(Pids) ->
 user_login(Args) ->
     eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
 					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
+    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Admin\\redirect",
+					   "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]\n", "CT2"]}),
 
-	%%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
+    %%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
     topic_to_pids([self()]),
     eadc_utils:info_to_pid(self(), "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
     Args.
@@ -201,6 +203,18 @@ Plugins:
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
+	"redirect" ->
+	    [Nick|_]=Args,
+	    [Cl|_]=eadc_user:client_find(#client{nick=Nick, _='_'}),
+	    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
+	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
+	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
+	"redirectsid" ->
+	    [SID_|_]=Args,SID=list_to_atom(SID_),
+	    [Cl|_]=eadc_user:client_find(#client{sid=SID, _='_'}),
+	    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
+	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
+	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
 	_ ->
 	    io:format("~s", [Command]),
 	    eadc_utils:info_to_pid(self(), "Unknown command"),
