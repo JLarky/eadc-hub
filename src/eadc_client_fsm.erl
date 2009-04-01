@@ -105,6 +105,7 @@ init([]) ->
 		    {stop, normal, State};	    
 		true ->
 		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
+		    ?DEBUG(error, "New client '~w'~n", [Addr]),
 		    My_Pid=self(), {I1,I2,I3,I4} = Addr,
 		    P_Inf=eadc_utils:parse_inf(Data),
 
@@ -117,10 +118,10 @@ init([]) ->
 			Cid ->
 			    ok;
 			WRONGCID ->
-			    eadc_utils:broadcast(fun(Pid_to_inform) ->
-							 eadc_utils:info_to_pid(Pid_to_inform,
-										lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
-						 end),
+			    %%eadc_utils:broadcast(fun(Pid_to_inform) ->
+				%%			 eadc_utils:info_to_pid(Pid_to_inform,
+					%%					lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
+						%% end),
 			    eadc_utils:info_to_pid(self(), "Your CID isn't corresponding to PID. You are cheater.")
 		    end,
 		    
@@ -428,10 +429,11 @@ client_command(Header, Command, Args, Pids, State) ->
 		Msg=get_val(par, Args),
 		Sid=list_to_atom(get_val(my_sid, Args)),
                 Nick=Client#client.nick,
-                ?DEBUG(debug, "client_command: priv_msg hook", []),
+                ?DEBUG(debud, "client_command: priv_msg hook ~s", [Data]),
                 Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},
                         {data, Data},{pids,Pids},{state, State}],
-                eadc_plugin:hook(priv_msg, Params);
+                %%eadc_plugin:hook(priv_msg, Params);
+		[{data, Data},{pids,Pids}];
 	    {'B','INF'} ->
 		%% user not allow to change his CT or ID
 		Inf_update=lists:filter(fun(A) -> 
@@ -449,7 +451,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		    true ->
 			Args2=get_val(par, Args),
 			Sid=list_to_atom(get_val(my_sid, Args)),
-			?DEBUG(debud, "client_command: ctm hook ~w", [Pids]),
+			?DEBUG(debug, "client_command: ctm hook ~w", [Pids]),
 			eadc_plugin:hook(ctm, [{pid,self()},{args,Args2},{sid,Sid},{client,Client},
 					       {data,Data},{pids,Pids},{state, State}]);
 		    false ->
@@ -622,6 +624,11 @@ client_all() ->
 	    {undefined, ?FILE, ?LINE}
     end.
 
-send_to_socket(Data, #state{socket=Socket}) ->
-    ?DEBUG(debug, "send_to_socket event '~s'~n", [Data]),
+send_to_socket(Data, #state{socket=Socket, sid=Sid}) ->
+    case Sid of
+	'7CMW' ->
+	    ?DEBUG(debud, "send_to_socket event '~s'~n", [Data]);
+	_ ->
+	    ?DEBUG(debug, "send_to_socket event '~s'~n", [Data])
+    end,
     ok = gen_tcp:send(Socket, lists:concat([Data, "\n"])).

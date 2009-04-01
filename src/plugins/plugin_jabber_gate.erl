@@ -115,13 +115,14 @@ connect(Host, Port, Vhost) ->
 
 'NORMAL'({handle_xml, Xml}, StateData) ->
     A=(catch handle_xml(Xml, StateData)),
-    io:format("handle ~s \n~p\nwith error ~w\n", [utf8:to_utf8(lists:flatten(xml:element_to_string(Xml))),Xml, A]),
+    ?DEBUG(debug, "handle ~s \n~p\nwith error ~w\n", [utf8:to_utf8(lists:flatten(xml:element_to_string(Xml))),Xml, A]),
     {next_state, 'NORMAL', StateData};
 'NORMAL'({send, Bin}, #plug_state{socket=Socket}=StateData) ->
     %%io:format("NORMAL send ~s\n", [Bin]),
     case (catch gen_tcp:send(Socket, Bin)) of
-	Any ->
-	    io:format("NORMAL send ~w\n\n", [Any])
+	ok -> ok;
+	Error ->
+	    ?DEBUG(error, "NORMAL send ~w\n\n", [Error])
     end,
     {next_state, 'NORMAL', StateData};
 'NORMAL'(Any, StateData) ->
@@ -157,20 +158,20 @@ handle_info({tcp, Socket, Bin}, 'WAIT FOR REPLY', #plug_state{socket=Socket}=Sta
 handle_info({tcp, Socket, Bin_u}, StateName, 
 	    #plug_state{socket=Socket, tcp_buf=Tcp_Buf, xml_buf=Buf}=StateData) ->
     inet:setopts(StateData#plug_state.socket, [{active, once}]),
-    io:format("0=== ~p\n", [Bin_u]),
+    %%io:format("0=== ~p\n", [Bin_u]),
     Data=Tcp_Buf++Bin_u,
     case (catch utf8:from_utf8(Data)) of
 	{'EXIT', _Error} ->
 	    {next_state, StateName, StateData#plug_state{tcp_buf=Data}};
 	Bin when is_list(Bin) ->
-	    io:format("1=== ~p\n", [Bin]),
+	    %%io:format("1=== ~p\n", [Bin]),
 	    New_Buf=case Buf of
 			[] ->
 			    bla(Bin);
 			{XStateName, XmlElement, [], Acc} ->
 			    bla({XStateName, XmlElement, Bin, Acc})
 		    end,
-	    io:format("2=== ~p\n", [New_Buf]),
+	    %%io:format("2=== ~p\n", [New_Buf]),
 	    {next_state, StateName, StateData#plug_state{xml_buf=New_Buf, tcp_buf=""}}
     end;
 
@@ -219,7 +220,7 @@ chat_msg(Args) ->
 	    Msg=eadc_utils:get_val(msg, Args),
 	    Client=eadc_client_fsm:client_get(Sid),
 	    Nick=Client#client.nick,
-	    io:format("------------------------======================-------------------- ~w\n",[{chat_msg, Nick, Msg}]),
+	    %%io:format("------------------------======================-------------------- ~w\n",[{chat_msg, Nick, Msg}]),
 	    (catch gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg})),
 	    eadc_utils:set_val(pids, [], Args)
     end.
@@ -262,7 +263,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 	    ok;
 	"presence" ->
 	    {from_presence,From_Nick}={from_presence,lists:nthtail(string:len(Conf)+1, From)},
-	    io:format("\n!!!! \n!!!! ~s\n", [From_Nick]),
+	    %%io:format("\n!!!! \n!!!! ~s\n", [From_Nick]),
 	    Client = case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
 			 [X] -> X;
 			 [] -> #client{}
@@ -275,7 +276,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 			    Sid=Client#client.sid,
 			    eadc_client_fsm:client_delete(Sid),
 			    eadc_utils:broadcast({string, "IQUI "++atom_to_list(Sid)}),
-			    io:format("LOGOUT ~s\n", [atom_to_list(Sid)]),
+			    %%io:format("LOGOUT ~s\n", [atom_to_list(Sid)]),
 			    ok;
 			_other -> %% do login
 			    case eadc_user:client_find(#client{nick=From_Nick, _='_'}) of
@@ -296,23 +297,23 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 		true ->
 		    ok
 	    end,
-	    io:format("handle_xml !!!!! ~w\n", [{presence, From_Nick, Els}]),
+	    ?DEBUG(debug, "handle_xml !!!!! ~w\n", [{presence, From_Nick, Els}]),
 	    ok;
 	"iq" ->
 	    To=eadc_utils:get_val("to", Attrs),
 	    Type=eadc_utils:get_val("type", Attrs),
 	    Id=eadc_utils:get_val("id", Attrs),
 	    if ( (To==Host) and (Type == "get")) ->
-		    io:format("handle_xml iq  :\n~s\n", [lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))]),
+		    %%io:format("handle_xml iq  :\n~s\n", [lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))]),
 		    gen_fsm:send_event(jabber_server, {send, "<iq from='"++Host++"' to='"++From++"' type='result' id='"++Id++"'>
 <query xmlns='http://jabber.org/protocol/disco#info'>
 <identity category='gateway' type='dc' name='DC gate' /></query></iq>"});
 	       true ->
-		    io:format("handle_xml iq Other !!!!! :\n~s\n", [utf8:to_utf8(lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els})))])
+		    ?DEBUG(error, "handle_xml iq Other !!!!! :\n~s\n", [utf8:to_utf8(lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els})))])
 	    end,
 	    ok;
 	Other ->
-	    io:format("handle_xml Other !!!!! ~s:\n~s\n", [Other,lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))]),
+	    ?DEBUG(error, "handle_xml Other !!!!! ~s:\n~s\n", [Other,lists:flatten(xml:element_to_string({xmlelement, Name, Attrs, Els}))]),
 	    ok
     end.
 	    

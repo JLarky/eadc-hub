@@ -50,10 +50,10 @@ ctm(Args) ->
     Direction=lists:concat([whois(Client_t#client.addr), "\\sи\\s", whois(Client#client.addr)]),
  
     %% send message to sender
-    eadc_utils:info_to_pid(self(), io_lib:format("~s только что попробовал приконнектиться к ~s. (~s)",[Nick_f, Nick_t,Direction])),
+    %%eadc_utils:info_to_pid(self(), io_lib:format("~s только что попробовал приконнектиться к ~s. (~s)",[Nick_f, Nick_t,Direction])),
     case {whois(Client_t#client.addr), whois(Client#client.addr)} of
 	{F, T} when (F == inet) or (T == inet) ->
-	    eadc_utils:info_to_pid(self(), "Но нифига из этого не выйдет."),
+	    eadc_utils:info_to_pid(self(), "нифига не выйдет."),
 	    lists:keyreplace(pids, 1, Args, {pids, []});
 	_ ->
 	    Args

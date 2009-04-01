@@ -42,6 +42,7 @@ user_login(Args) ->
 chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
     ?GET_VAL(msg, Msg),
+    ?GET_VAL(data, Data),
     case Msg of 
 	[$!|Command] -> %% command
 	    {ok, Params}=regexp:split(Command, " "),
@@ -51,7 +52,10 @@ chat_msg(Args) ->
 	    Args1=lists:keyreplace(msg, 1, Args, {msg, []}),
 	    lists:keyreplace(pids, 1, Args1, {pids, []});
 	_ -> 
-	    lists:keyreplace(msg, 1, Args, {msg, utf8:to_utf8(lists:sublist(utf8:from_utf8(Msg), 1024))})
+	    lists:keyreplace(data, 1, Args, {data, utf8:to_utf8(lists:sublist(utf8:from_utf8(Data), 1024))})
+	    %%lists:keyreplace(msg, 1, Args, {msg, utf8:to_utf8(lists:sublist(utf8:from_utf8(Msg), 1024))})
+	    %%lists:keyreplace(data, 1, Args, {data, utf8:to_utf8(lists:sublist(utf8:from_utf8(""), 1024))})
+    
     end.
 
 do_command([Command|Args], State, Client) ->
@@ -59,16 +63,22 @@ do_command([Command|Args], State, Client) ->
 	"help" ->
 	    Hlp="All hub commands:
 User's commands:
- !help - show this help
- !regme <password> - register new user with password <password>'
- !userlist - show all users with hidden passwords
+ !help - shows this help
+ !regme <password> - registers new user with password <password>
+ !userlist - shows all users with hidden passwords
 
 Admin's commands:
- !regclass <user> <class> - change users's class to <class>
- !userlist - show all users with their's passwords
- !topic <topic> - set the hub's topic
- !getconfig - show all set options
- !setconfig <key> <val> - set hub's option 
+ !regclass <user> <class> - changes user's class to <class>
+ !userlist - shows all users with their passwords
+ !topic <topic> - sets hub's topic
+ !getconfig - shows all set options
+ !setconfig <key> <val> - sets hub's option 
+
+Plugins:
+ !plugin on <plugin> - turns on plugin and adds it to autostart
+ !plugin off <plugin> - turns off plugin and removes it from autostart
+ !pluginlist - shows all running plugins
+
 ",
 	    eadc_utils:info_to_pid(self(), Hlp);
 	"regnewuser" ->
@@ -151,36 +161,46 @@ Admin's commands:
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
 	"plugin" ->
-	    {MName,F,M}=case Args of
-			    ["on", Name|_] ->
-				{list_to_atom(Name),init, "initialized."};
-			    ["off", Name|_] ->
-			      {list_to_atom(Name),terminate, "terminated"};
-			  _ ->
-			      eadc_utils:info_to_pid(self(), "Wrong parametrs."),
-			      {"","",""}
-		      end,
-	    case (catch MName:F()) of
-		{'EXIT',{undef,[{MName,F,[]}|_]}} ->
-		    eadc_utils:error_to_pid(self(), "Plugin "++atom_to_list(MName)
-					    ++" can't be "++M++".");
-		ok ->
-		    PL=eadc_plugin:get_plugins(),
-		    case F of
-			init ->
-			    eadc_plugin:set_plugins([MName|PL]);
-			terminate ->
-			    eadc_plugin:set_plugins(lists:delete(MName,PL))
-		    end,
-		    eadc_utils:info_to_pid(self(), "Plugin "++atom_to_list(MName)
-					   ++" have been "++M++".");
-		{error, Error} ->
+	    case eadc_user:access('plugin manage') of
+                true ->
+		    {MName,F,M}=case Args of
+				    ["on", Name|_] ->
+					{list_to_atom(Name),init, "initialized."};
+				    ["off", Name|_] ->
+					{list_to_atom(Name),terminate, "terminated"};
+				    _ ->
+					eadc_utils:info_to_pid(self(), "Wrong parametrs."),
+					{"","",""}
+				end,
+		    case (catch MName:F()) of
+			{'EXIT',{undef,[{MName,F,[]}|_]}} ->
+			    eadc_utils:error_to_pid(self(), "Plugin "++atom_to_list(MName)
+						    ++" can't be "++M++".");
+			ok ->
+			    PL=eadc_plugin:get_plugins(),
+			    case F of
+				init ->
+				    eadc_plugin:set_plugins([MName|PL]);
+				terminate ->
+				    eadc_plugin:set_plugins(lists:delete(MName,PL))
+			    end,
+			    eadc_utils:info_to_pid(self(), "Plugin "++atom_to_list(MName)
+						   ++" have been "++M++".");
+			{error, Error} ->
 			    eadc_utils:info_to_pid(self(), lists:flatten(Error))
+		    end;
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
 	"pluginlist" ->
-	    PL=eadc_plugin:get_plugins(),
-	    Out=lists:foldl(fun(Pname, Acc) -> Acc++"\n"++atom_to_list(Pname) end,"",PL),
-	    eadc_utils:info_to_pid(self(), Out);
+	    case eadc_user:access('plugin manage') of
+                true ->
+		    PL=eadc_plugin:get_plugins(),
+		    Out=lists:foldl(fun(Pname, Acc) -> Acc++"\n"++atom_to_list(Pname) end,"",PL),
+		    eadc_utils:info_to_pid(self(), Out);
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
 	_ ->
 	    io:format("~s", [Command]),
 	    eadc_utils:info_to_pid(self(), "Unknown command"),
