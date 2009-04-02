@@ -1,7 +1,7 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([convert/1, quote/1, unquote/1]).
+-export([quote/1, unquote/1,s2a/1, a2s/1]).
 -export([random_base32/1, base32/1, base32_encode/1,
 	unbase32/1, base32_decode/1]).
 
@@ -17,42 +17,10 @@
 
 -include("eadc.hrl").
 
-%% @spec convert({FromType::atom(), Arg::term()}) -> {Type::atom(), Val::term()}
-%% FromType = string | list | args
-%% Type = list | string
-%% @doc Converts <pre>
-%% {string, "some little string"} to {list, ["some", "little", "string"]}
-%% {list, ["some", "little string"}] to {string, "some little string"}
-%% {args, ["some", "little string"}] to {string, "some little\sstring"}
-%% </pre>
-convert({string, String}) ->
-    convert_string (String);
-convert({list, List}) when is_list(List) ->
-    convert_list(_Out=[], List);
-convert({args, List}) when is_list(List) ->
-    convert_args(_Out=[], List).
-
-convert_string(String) ->
-    {Bu, Ac} = lists:foldr(fun(Char, {Buf, Acc}) ->
-			 case Char of
-			     $\  -> {[], [Buf|Acc]};
-			     _ -> {[Char | Buf], Acc}
-			 end
-		 end, {[],[]}, String), {list, [Bu|Ac]}.
-
-convert_list(Out, []) ->
-    {string, Out};
-convert_list( [], [H|T]) when is_list(H)->
-    convert_list(H, T);
-convert_list(Out, [H|T]) when is_list(H)->
-    convert_list(Out++" "++H, T).
-
-convert_args(Out, []) ->
-    {string, Out};
-convert_args( [], [H|T]) when is_list(H)->
-    convert_args(quote(H), T);
-convert_args(Out, [H|T]) when is_list(H)->
-    convert_args(Out++" "++quote(H), T).
+%% @doc Converts <code>"some little\sstring" -> ["some", "little string"]</code>
+s2a(String) -> _Args=lists:map(fun unquote/1, string:tokens(String," ")).
+%% @doc Converts <code>%% ["some", "little string"] -> "some little\sstring"</code>
+a2s(Args) -> _String=string:join(lists:map(fun quote/1, Args), " ").
 
 %% @spec quote(string()) -> QutedString::string()
 %% @doc quotes space, newline and '\' characters. Like "Hello World" -> "Hello\sWorld"
@@ -200,7 +168,7 @@ code_reload(Module) ->
 %% @see get_val/2
 %% @see deparse_inf/1
 parse_inf(Inf) ->
-    {list, List} = convert({string, Inf}),
+    List = s2a(Inf),
     lists:map(fun([H1,H2|T]) ->
 		      {list_to_atom([H1,H2]), T}
 	      end, List).
@@ -235,11 +203,11 @@ send_to_pids(Pids, Param) when is_list(Pids) ->
 %% Param = {list, List} | {args, List} | List
 %% List = string()
 %% @doc applies {@link convert/1} to Param if needed and sends String to socket controlled by gen_fsm with pid Pid
-send_to_pid(Pid, {list, List}) when is_list(List) ->
-    {string, String} = eadc_utils:convert({list, List}),
-    eadc_utils:send_to_pid(Pid, String);
+%%send_to_pid(Pid, {list, List}) when is_list(List) ->
+%%    {string, String} = eadc_utils:convert({list, List}),
+%%    eadc_utils:send_to_pid(Pid, String);
 send_to_pid(Pid, {args, List}) when is_list(List) ->
-    {string, String} = eadc_utils:convert({args, List}),
+    String = eadc_utils:a2s(List),
     eadc_utils:send_to_pid(Pid, String);
 send_to_pid(Pid, String) when is_pid(Pid) and is_list(String) ->
     gen_fsm:send_event(Pid, {send_to_socket, String});

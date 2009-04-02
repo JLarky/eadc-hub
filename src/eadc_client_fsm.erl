@@ -95,7 +95,7 @@ init([]) ->
 
 'IDENTIFY STAGE'({data, Data}, #state{socket=Socket, addr=Addr, sid=Sid}=State) ->
     ?DEBUG(debug, "String recived in IDENTIFY '~s'~n", [Data]),
-    {list, List} = eadc_utils:convert({string, Data}),
+    List = eadc_utils:s2a(Data),
     case List of
 	["BINF", SID | _] ->
 	    gen_tcp:send(Socket, "IINF CT32 VEEADC NIHub DE \n"),
@@ -169,8 +169,8 @@ init([]) ->
     {stop, normal, State}.
 
 'VERIFY STAGE'({data, Data}, #state{addr=Addr, login=Login, random=Random, sid=_Sid, afterverify=Func, triesleft=Tries_left}=State) ->
-    case eadc_utils:convert({string, Data}) of
-	{list, ["HPAS", Pass]} ->
+    case eadc_utils:s2a(Data) of
+	["HPAS", Pass] ->
 	    Account=eadc_utils:account_get(Login),
 	    User_Pass = Account#account.pass,
 	    A=User_Pass++Random,
