@@ -21,7 +21,7 @@ init(Args) ->
     Sid=eadc_client_fsm:get_unical_SID(),
     Nick="test-room",
     Inf="BINF "++Sid++" CT5"++" ID"++Cid++" NI"++Nick++" DEтестовая\\sкомната",
-    eadc_client_fsm:client_write(#client{cid=Cid, sid=list_to_atom(Sid), nick=Nick, inf=Inf, pid=undefined}),
+    eadc_client_fsm:client_write(#client{cid=Cid, sid=eadc_utils:unbase32(Sid), nick=Nick, inf=Inf, pid=undefined}),
     Args.
 
 topic_to_pids(Pids) ->
@@ -207,7 +207,8 @@ Plugins:
 	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
 	"redirectsid" ->
-	    [SID_|_]=Args,SID=list_to_atom(SID_),
+	    [SID_|_]=Args,SID=eadc_utils:unbase32(SID_),
+	    io:format("~p\n", [SID]),
 	    [Cl|_]=eadc_user:client_find(#client{sid=SID, _='_'}),
 	    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
 	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
