@@ -81,7 +81,7 @@ init([]) ->
 	    {A,B,C}=time(), random:seed(A,B,C),
 	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
 	    Sid = get_unical_SID(),
-	    ok = gen_tcp:send(Socket, "ISID "++Sid ++"\n"),
+	    ok = gen_tcp:send(Socket, ["ISID ",Sid, "\n"]),
 	    {next_state, 'IDENTIFY STAGE', State#state{sid=list_to_atom(Sid)}, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
@@ -101,7 +101,7 @@ init([]) ->
 	    gen_tcp:send(Socket, "IINF CT32 VEEADC NIHub DE \n"),
 	    case list_to_atom(SID) == Sid of
 		false ->
-		    gen_tcp:send(Socket,"ISTA 240 "++eadc_utils:quote("SID is not correct")++"\n"),
+		    gen_tcp:send(Socket,["ISTA 240 ",eadc_utils:quote("SID is not correct"),"\n"]),
 		    {stop, normal, State};	    
 		true ->
 		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
@@ -343,7 +343,7 @@ handle_info(Info, StateName, StateData) ->
 terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
     case Reason of
 	String when is_list(String) ->
-	    (catch gen_tcp:send(Socket, "ISTA 123 "++eadc_utils:quote(Reason)++"\n"));
+	    (catch gen_tcp:send(Socket, ["ISTA 123 ",eadc_utils:quote(Reason),"\n"]));
 	_ -> ok
     end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
@@ -538,22 +538,17 @@ test(String) ->
 
 
 inf_update(Inf, Inf_update) ->
-    [$B,$I,$N,$F,$\ |Inf_to_parse]=Inf,
-    Parsed_Inf=eadc_utils:parse_inf(Inf_to_parse),
-    New_Inf=
-	lists:foldl(fun([A1,A2|Cur_update], Acc) ->
-			    Key=list_to_atom([A1,A2]),
-			    case get_val(Key, Parsed_Inf) of
-				'NO KEY' ->
-				    Acc++[{Key,Cur_update}];
-				_ ->
-				    case Cur_update of
-				    [] -> lists:keydelete(Key, 1, Acc);
-					_  -> eadc_utils:set_val(Key, Cur_update, Acc)
-				    end
-			    end
-		    end, Parsed_Inf, Inf_update),
-    "BINF"++eadc_utils:deparse_inf(New_Inf).
+    ["BINF", SID |Parsed_Inf]=string:tokens(Inf, " "),
+    Filter = fun([A1,A2|_],[A1,A2]) -> []; %% delete field if val is empty 
+		([A1,A2|_],[A1,A2|Val]) -> [A1,A2|Val]; % update value
+		(Inf_Elem, _Inf_Update) -> Inf_Elem % pass value unchanged
+	     end,
+    Map = fun(Inf_elem) ->  %% Aplly updates to Inf_elem
+		  lists:foldl(fun(Update_elem, Acc) -> Filter(Acc, Update_elem)
+			      end, Inf_elem, Inf_update)
+	  end,
+    New_Inf=lists:map(Map, Parsed_Inf), %% call Map to every element of inf string
+    string:join(["BINF", SID | New_Inf], " ").
 
 user_login(Sid,Nick,Cid,Args) ->
     My_Pid=self(),Pre_Client=#client{pid=My_Pid, sid=Sid, nick=Nick, cid=Cid, 
@@ -625,10 +620,5 @@ client_all() ->
     end.
 
 send_to_socket(Data, #state{socket=Socket, sid=Sid}) ->
-    case Sid of
-	'7CMW' ->
-	    ?DEBUG(debud, "send_to_socket event '~s'~n", [Data]);
-	_ ->
-	    ?DEBUG(debug, "send_to_socket event '~s'~n", [Data])
-    end,
-    ok = gen_tcp:send(Socket, lists:concat([Data, "\n"])).
+    ?DEBUG(debug, "send_to_socket event '~w'~n", [Data]),
+    ok = gen_tcp:send(Socket, [Data, "\n"]).
