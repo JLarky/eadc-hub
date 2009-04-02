@@ -82,7 +82,7 @@ init([]) ->
 	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
 	    Sid = get_unical_SID(),
 	    ok = gen_tcp:send(Socket, ["ISID ",Sid, "\n"]),
-	    {next_state, 'IDENTIFY STAGE', State#state{sid=list_to_atom(Sid)}, ?TIMEOUT};
+	    {next_state, 'IDENTIFY STAGE', State#state{sid=eadc_utils:unbase32(Sid)}, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
@@ -99,7 +99,7 @@ init([]) ->
     case List of
 	["BINF", SID | _] ->
 	    gen_tcp:send(Socket, "IINF CT32 VEEADC NIHub DE \n"),
-	    case list_to_atom(SID) == Sid of
+	    case SID == eadc_utils:base32(Sid) of
 		false ->
 		    gen_tcp:send(Socket,["ISTA 240 ",eadc_utils:quote("SID is not correct"),"\n"]),
 		    {stop, normal, State};	    
@@ -348,7 +348,7 @@ terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
 	_ -> ok
     end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
-    String_to_send = "IQUI "++ atom_to_list(Sid) ++"\n",
+    String_to_send = "IQUI "++ eadc_utils:base32(Sid) ++"\n",
     eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{state, State}]),
     lists:foreach(fun(Pid) ->
 			  case Pid of
@@ -420,7 +420,7 @@ client_command(Header, Command, Args, Pids, State) ->
 	case {Header,Command} of 
 	    {"B","MSG"} ->
 		[Msg|_]=get_val(par, Args),
-		Sid=list_to_atom(get_val(my_sid, Args)),
+		Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
 		Nick=Client#client.nick,
 		?DEBUG(debug, "client_command: chat_msg hook", []),
 		Params=[{pid,self()},{msg,eadc_utils:unquote(Msg)},{sid,Sid},{nick,Nick},
@@ -428,7 +428,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		eadc_plugin:hook(chat_msg, Params);
 	    {"E", "MSG"} -> % private
 		Msg=get_val(par, Args),
-		Sid=list_to_atom(get_val(my_sid, Args)),
+		Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
                 Nick=Client#client.nick,
                 ?DEBUG(debud, "client_command: priv_msg hook ~s", [Data]),
                 Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},
@@ -451,7 +451,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		case is_pid(Pid) of
 		    true ->
 			Args2=get_val(par, Args),
-			Sid=list_to_atom(get_val(my_sid, Args)),
+			Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
 			?DEBUG(debug, "client_command: ctm hook ~w", [Pids]),
 			eadc_plugin:hook(ctm, [{pid,self()},{args,Args2},{sid,Sid},{client,Client},
 					       {data,Data},{pids,Pids},{state, State}]);
@@ -474,14 +474,15 @@ get_val(Key, Args) ->
     eadc_utils:get_val(Key, Args).
 
 get_unical_SID() ->
-    Sid=eadc_utils:random_base32(4),
+    Sids=eadc_utils:random_base32(4), %% TODO: delete that
+    Sid=eadc_utils:unbase32(Sids),
     MatchHead = #client{sid='$1', _='_'},Guard = [{'==', '$1', Sid}],Result = '$1',
     F = fun() ->
 		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
 	end,
     case catch mnesia:transaction(F) of
 	{atomic, []} -> %% not used SID
-	    Sid;
+	    Sids;
 	{atomic, [_|_]} -> %% CID allready in use, generate new
 	    get_unical_SID();
 	Error -> {error, Error} 
@@ -499,7 +500,7 @@ get_pid_by_sid(Sid) when is_atom(Sid) ->
     end;
 
 get_pid_by_sid(Sid) when is_list(Sid)->
-    get_pid_by_sid(list_to_atom(Sid)).
+    get_pid_by_sid(eadc_utils:unbase32(Sid)).
 
 get_unical_cid(Cid) ->
     MatchHead = #client{cid='$1', _='_'},Guard = [{'==', '$1', Cid}],Result = '$1',
