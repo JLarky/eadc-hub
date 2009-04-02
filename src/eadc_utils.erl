@@ -108,12 +108,13 @@ base32_encode_(Bin, Out) ->
 %% @spec unbase32(base32char()) -> integer()
 %% @doc A=unbase32(base32(A))
 %% @see base32/1
-unbase32([V]) when ((V>64) and (V <91)) or ((V > 49) and (V < 56)) ->
-    if
-	V < 56 -> V-24;
-	V > 64 -> V-65
-    end;
-unbase32(String) ->
+unbase32([V]) when ((V >= $A) and (V =< $Z)) ->
+    V-$A;
+unbase32([V]) when ((V >= $2) and (V =< $7)) ->
+    V-$2+26;
+unbase32([V]) ->
+    throw({badarg, [V]});
+unbase32(String=[_|_]) ->
     lists:foldl(fun(Char, Acc) ->
 			Acc*32+unbase32([Char])
 		end, 0, String).
