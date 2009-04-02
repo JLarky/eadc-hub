@@ -54,10 +54,7 @@ chat_msg(Args) ->
 	    Args1=lists:keyreplace(msg, 1, Args, {msg, []}),
 	    lists:keyreplace(pids, 1, Args1, {pids, []});
 	_ -> 
-	    lists:keyreplace(data, 1, Args, {data, utf8:to_utf8(lists:sublist(utf8:from_utf8(Data), 1024))})
-	    %%lists:keyreplace(msg, 1, Args, {msg, utf8:to_utf8(lists:sublist(utf8:from_utf8(Msg), 1024))})
-	    %%lists:keyreplace(data, 1, Args, {data, utf8:to_utf8(lists:sublist(utf8:from_utf8(""), 1024))})
-    
+	    lists:keyreplace(data, 1, Args, {data, lists:sublist(Data, 512)})
     end.
 
 do_command([Command|Args], State, Client) ->

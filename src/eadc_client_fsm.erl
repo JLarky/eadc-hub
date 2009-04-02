@@ -223,12 +223,13 @@ init([]) ->
     {stop, normal, State}.
 
 
-'NORMAL STAGE'({data, Data}, #state{socket=Socket} = State) ->
+'NORMAL STAGE'({data, Data_utf8}, #state{socket=Socket} = State) ->
+    Data=utf8:from_utf8(Data_utf8),
     ?DEBUG(debug, "DATA recived in NORMAL '~s'~n", [Data]),
-    {list, Message}=eadc_utils:convert({string, Data}),
+    Message=string:tokens(Data, " "),
     case Message of
 	[[Header|Command_name]|Tail] ->
-	    H = list_to_atom([Header]),Cmd=list_to_atom(Command_name),
+	    H = [Header],Cmd=Command_name,
 	    Res = (catch handle_command(H, Cmd, Tail, Data, State)),
 	    case Res of
 		ok ->
@@ -260,7 +261,7 @@ init([]) ->
     {stop, normal, State};
 
 'NORMAL STAGE'(Other, State) ->
-    ?DEBUG(debug, "Unknown message '~s' ~n", [Other]),
+    ?DEBUG(error, "Unknown message '~s' ~n", [Other]),
     {next_state, 'NORMAL STAGE', State}.
 
 
@@ -385,31 +386,31 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 handle_command(H, Cmd, Tail, Data, State) ->
     {Pids, Args} = %% в данном случае мы получаем список получателей
 	case H of  %% и параметры для обработчика одним махом =)
-	    'B' ->
+	    "B" ->
 		[MySid | Par] = Tail, 
 		{all_pids(), 
 		 [{par, Par}, {my_sid, MySid}]};
-	    'I' ->
+	    "I" ->
 		{[], 
 		 [{par, Tail}]};
-	    'H' ->
+	    "H" ->
 		{[], 
 		 [{par, Tail}]};
-	    'D' ->
+	    "D" ->
 		[MySid, TSid | Par] = Tail, 
 		{[get_pid_by_sid(TSid)], 
 		 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
-	    'E' ->
+	    "E" ->
 		[MySid, TSid | Par] = Tail, 
 		{[get_pid_by_sid(MySid), get_pid_by_sid(TSid)], 
 		 [{par, Par}, {my_sid, MySid}, {tar_sid, TSid}]};
-	    'F' ->
+	    "F" ->
 		[MySid | Par] = Tail,
 		{all_pids(), 
 		 [{par, Par}, {my_sid, MySid}]}
 	end,
     {New_Pids, New_Data} = client_command(H, Cmd, [{data, Data}|Args], Pids, State),
-    eadc_utils:send_to_pids(New_Pids, New_Data).
+    eadc_utils:send_to_pids(New_Pids, utf8:to_utf8(New_Data)).
 
 client_command(Header, Command, Args, Pids, State) ->
     Data=get_val(data, Args),
@@ -417,7 +418,7 @@ client_command(Header, Command, Args, Pids, State) ->
     
     Res =
 	case {Header,Command} of 
-	    {'B','MSG'} ->
+	    {"B","MSG"} ->
 		[Msg|_]=get_val(par, Args),
 		Sid=list_to_atom(get_val(my_sid, Args)),
 		Nick=Client#client.nick,
@@ -425,7 +426,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		Params=[{pid,self()},{msg,eadc_utils:unquote(Msg)},{sid,Sid},{nick,Nick},
 			{data, Data},{pids,Pids},{state, State},{client,Client}],
 		eadc_plugin:hook(chat_msg, Params);
-	    {'E', 'MSG'} -> % private
+	    {"E", "MSG"} -> % private
 		Msg=get_val(par, Args),
 		Sid=list_to_atom(get_val(my_sid, Args)),
                 Nick=Client#client.nick,
@@ -434,7 +435,7 @@ client_command(Header, Command, Args, Pids, State) ->
                         {data, Data},{pids,Pids},{state, State}],
                 %%eadc_plugin:hook(priv_msg, Params);
 		[{data, Data},{pids,Pids}];
-	    {'B','INF'} ->
+	    {"B","INF"} ->
 		%% user not allow to change his CT or ID
 		Inf_update=lists:filter(fun(A) -> 
 						not (lists:prefix("CT", A) or
@@ -445,7 +446,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
 		%% no any plugin
 		[{pids, Pids}, {data, New_Inf_to_send}];
-	    {'D','CTM'} ->
+	    {"D","CTM"} ->
 		{pid,[Pid]} = {pid,Pids},
 		case is_pid(Pid) of
 		    true ->
@@ -621,4 +622,9 @@ client_all() ->
 
 send_to_socket(Data, #state{socket=Socket, sid=Sid}) ->
     ?DEBUG(debug, "send_to_socket event '~w'~n", [Data]),
-    ok = gen_tcp:send(Socket, [Data, "\n"]).
+    case (catch gen_tcp:send(Socket, [Data, "\n"])) of
+	ok ->
+	    ok;
+	Error ->
+	    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
+    end.
