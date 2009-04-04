@@ -17,11 +17,11 @@ terminate() ->
      {error, "This plugin can't be stopped"}.
 
 init(Args) ->
-    Cid=eadc_client_fsm:get_unical_cid(eadc_utils:random_base32(39)),
+    Cid=eadc_client_fsm:get_unical_cid(),
     Sid=eadc_client_fsm:get_unical_SID(),
     Nick="test-room",
-    Inf="BINF "++Sid++" CT5"++" ID"++Cid++" NI"++Nick++" DEтестовая\\sкомната",
-    eadc_client_fsm:client_write(#client{cid=Cid, sid=eadc_utils:unbase32(Sid), nick=Nick, inf=Inf, pid=undefined}),
+    Inf="BINF "++eadc_utils:sid_to_s(Sid)++" CT5"++" ID"++Cid++" NI"++Nick++" DEтестовая\\sкомната",
+    eadc_client_fsm:client_write(#client{cid=Cid, sid=Sid, nick=Nick, inf=Inf, pid=undefined}),
     Args.
 
 topic_to_pids(Pids) ->
@@ -179,7 +179,7 @@ Plugins:
 			    PL=eadc_plugin:get_plugins(),
 			    case F of
 				init ->
-				    eadc_plugin:set_plugins([MName|PL]);
+				    eadc_plugin:set_plugins(PL++[MName]);
 				terminate ->
 				    eadc_plugin:set_plugins(lists:delete(MName,PL))
 			    end,

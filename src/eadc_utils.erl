@@ -2,8 +2,8 @@
 -author('jlarky@gmail.com').
 
 -export([quote/1, unquote/1,s2a/1, a2s/1]).
--export([random_base32/1, base32/1, base32_encode/1,
-	unbase32/1, base32_decode/1]).
+-export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
+	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
 -export([code_reload/1]).
 -export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, set_val/3]).
@@ -55,19 +55,22 @@ unquote(String) ->
 				    end end, {[],[]}, String),
     lists:append(U_String, [Buf]).
 
-%% @type base32string() = [base32char()]
-%% @type base32char() = ABCDEFGHIJKLMNOPQRSTUVWXYZ234567
-%% @spec random_base32(integer()) -> base32string()
-%% @doc returns base32 encoded string with length Count
-random_base32(Count) ->
-    {A,B,C}=time(), 
+random(Max) ->
+    {A,B,C}=time(),
     {D,E,F}=random:seed(),
     random:seed(A+D+erlang:crc32(pid_to_list(self())),B+E, C+F),
-    random_base32(Count, []).
-random_base32(0, Output) ->
-    Output;
-random_base32(Count, Output) ->
-    random_base32(Count-1, Output)++base32(random:uniform(32)-1).
+    random:uniform(Max).
+
+random_string(Length) ->
+    random_string_(Length, "").
+
+random_string_(Length, Acc) when Length < 1->
+    Acc;
+random_string_(Length, Acc) ->
+    {A,B,C}=time(),
+    {D,E,F}=random:seed(),
+    random:seed(A+D+erlang:crc32(pid_to_list(self())),B+E, C+F),
+    random_string_(Length-1, [random:uniform(255)|Acc]).
 
 %% @spec base32(integer()) -> [base32char()]
 %% @doc returns base32 character corresponding to V like 1 -> 'B', 31 -> '7'.
@@ -151,6 +154,19 @@ base32_decode_(Bits, Out) ->
 	<<H:6>> -> Out++[H bsl 2];
 	<<H:7>> -> Out++[H bsl 1]
     end.
+
+fillA(I, String) when I < 1 ->
+    String;
+fillA(Count, String) ->
+    fillA(Count-1, [$A|String]).
+
+sid_to_s(Sid) ->
+    Sid_string=base32(Sid),
+    fillA(4-length(Sid_string), Sid_string).
+
+cid_to_s(Sid) ->
+    Sid_string=base32(Sid),
+    fillA(39-length(Sid_string), Sid_string).
 
 %% @spec code_reload(atom()) -> {module, Module} | {error, Error}
 %% @doc does 'make' and loads Module if it's possible.

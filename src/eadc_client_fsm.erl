@@ -22,7 +22,7 @@
 -export([all_pids/0,inf_update/2]).
 
 %% DEBUG
--export([test/1, get_pid_by_sid/1, get_unical_cid/1,get_unical_SID/0]).
+-export([test/1, get_pid_by_sid/1, get_unical_cid/0,get_unical_SID/0]).
 
 -export([client_get/1, client_write/1, client_delete/1,client_all/0]).
 
@@ -78,11 +78,10 @@ init([]) ->
     ?DEBUG(debug, "Data recived in PROTOCOL '~s'~n", [Data]),
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
-	    {A,B,C}=time(), random:seed(A,B,C),
 	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
 	    Sid = get_unical_SID(),
-	    ok = gen_tcp:send(Socket, ["ISID ",Sid, "\n"]),
-	    {next_state, 'IDENTIFY STAGE', State#state{sid=eadc_utils:unbase32(Sid)}, ?TIMEOUT};
+	    ok = gen_tcp:send(Socket, ["ISID ",eadc_utils:sid_to_s(Sid), "\n"]),
+	    {next_state, 'IDENTIFY STAGE', State#state{sid=Sid}, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
@@ -99,7 +98,7 @@ init([]) ->
     case List of
 	["BINF", SID | _] ->
 	    gen_tcp:send(Socket, "IINF CT32 VEEADC NIHub DE \n"),
-	    case SID == eadc_utils:base32(Sid) of
+	    case SID == eadc_utils:sid_to_s(Sid) of
 		false ->
 		    gen_tcp:send(Socket,["ISTA 240 ",eadc_utils:quote("SID is not correct"),"\n"]),
 		    {stop, normal, State};	    
@@ -141,7 +140,7 @@ init([]) ->
 
 		    case need_authority(Nick, Cid) of
 			true ->
-			    Random=tiger:hash(eadc_utils:random_base32(39)),
+			    Random=tiger:hash(eadc_utils:random_string(24)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
 			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
 			false ->
@@ -201,10 +200,11 @@ init([]) ->
 			I when is_integer(I) and (I > 0) ->
 			    timer:sleep(1000),
 			    eadc_utils:send_to_pid(self(), {args, ["ISTA", "123", "Wrong password"]}),
-			    New_Random=tiger:hash(eadc_utils:random_base32(39)),
+			    New_Random=tiger:hash(eadc_utils:random_string(24)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(New_Random)]}),
 			    {next_state, 'VERIFY STAGE', State#state{random=New_Random, triesleft=I}, ?TIMEOUT};
 			_Other ->
+			    %% TODO: send message to user
 			    {stop, normal, State}
 		    end
 	    end;
@@ -239,7 +239,7 @@ init([]) ->
 		    eadc_utils:error_to_pid(self(), Msg_to_send)
 	    end,
 	    ?DEBUG(debug, "command result ~w\n", [Res]);    
-	[[]] ->
+	[] ->
 	    keep_alive;
 	Other ->
 	    ?DEBUG(error, "Unknown message '~w'", [Other]),
@@ -477,15 +477,14 @@ get_val(Key, Args) ->
     eadc_utils:get_val(Key, Args).
 
 get_unical_SID() ->
-    Sids=eadc_utils:random_base32(4), %% TODO: delete that
-    Sid=eadc_utils:unbase32(Sids),
+    Sid=eadc_utils:random(1048575), %% 20 bit
     MatchHead = #client{sid='$1', _='_'},Guard = [{'==', '$1', Sid}],Result = '$1',
     F = fun() ->
 		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
 	end,
     case catch mnesia:transaction(F) of
 	{atomic, []} -> %% not used SID
-	    Sids;
+	    Sid;
 	{atomic, [_|_]} -> %% CID allready in use, generate new
 	    get_unical_SID();
 	Error -> {error, Error} 
@@ -505,6 +504,10 @@ get_pid_by_sid(Sid) when is_integer(Sid) ->
 get_pid_by_sid(Sid) when is_list(Sid)->
     get_pid_by_sid(eadc_utils:unbase32(Sid)).
 
+get_unical_cid() ->
+    Cid=eadc_utils:random((1 bsl 192)-1), %% 192 bit
+    get_unical_cid(eadc_utils:cid_to_s(Cid)).
+
 get_unical_cid(Cid) ->
     MatchHead = #client{cid='$1', _='_'},Guard = [{'==', '$1', Cid}],Result = '$1',
     F = fun() ->
@@ -514,7 +517,7 @@ get_unical_cid(Cid) ->
 	{atomic, []} -> %% not used CID
 	    Cid;
 	{atomic, [_|_]} -> %% CID allready in use, generate new
-	    get_unical_cid("CIDINUSE"++eadc_utils:random_base32(31));
+	    get_unical_cid("CIDINUSE"++lists:sublist(eadc_utils:cid_to_s(eadc_utils:random((1 bsl 192)-1)) ,31));
 	Error -> {error, Error} 
     end.
 
