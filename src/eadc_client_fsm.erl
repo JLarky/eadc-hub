@@ -330,6 +330,9 @@ handle_info({master, Data}, StateName, StateData) ->
 handle_info({'EXIT',Pid, Reason}, StateName, StateData) ->
     ?DEBUG(error, "this guy ~w just die: ~w\n", [Pid, Reason]),
     {next_state, StateName, StateData};    
+handle_info({tcp_error,_,Error}, _StateName, StateData) ->
+    ?DEBUG(error, "tcp_error ~w\n", [Error]),
+    {stop, normal, StateData};    
 handle_info(Info, StateName, StateData) ->
     ?DEBUG(error, "Unknown info ~w\n", [Info]),
     {noreply, StateName, StateData}.
@@ -430,7 +433,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		Msg=get_val(par, Args),
 		Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
                 Nick=Client#client.nick,
-                ?DEBUG(debud, "client_command: priv_msg hook ~s", [Data]),
+                ?DEBUG(debud, "client_command: priv_msg hook ~p", [Data]),
                 Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},
                         {data, Data},{pids,Pids},{state, State}],
                 %%eadc_plugin:hook(priv_msg, Params);
@@ -488,7 +491,7 @@ get_unical_SID() ->
 	Error -> {error, Error} 
     end.
 
-get_pid_by_sid(Sid) when is_atom(Sid) ->
+get_pid_by_sid(Sid) when is_integer(Sid) ->
     MatchHead = #client{sid='$1', pid='$2', _='_'},Guard = [{'==', '$1', Sid}],Result = '$2',
     F = fun() ->
 		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
@@ -539,17 +542,20 @@ test(String) ->
     %%gen_fsm:send_event(Pid, {send_to_socket, String}).
 
 
+inf_update_cur(Update, [], Acc) ->
+    [Update|Acc];            %% adds new field
+inf_update_cur([A1,A2], [[A1,A2|_Val]|Tail], Acc) ->
+    Tail++Acc;               %% deletes empthy field
+inf_update_cur([A1,A2|Val], [[A1,A2|_Val]|Tail], Acc) ->
+    [[A1,A2|Val]|Tail++Acc]; %% change field value
+inf_update_cur(Cur_Update, [Cur_Inf|Tail], Acc) ->
+    inf_update_cur(Cur_Update, Tail, [Cur_Inf|Acc]).
+
+
 inf_update(Inf, Inf_update) ->
     ["BINF", SID |Parsed_Inf]=string:tokens(Inf, " "),
-    Filter = fun([A1,A2|_],[A1,A2]) -> []; %% delete field if val is empty 
-		([A1,A2|_],[A1,A2|Val]) -> [A1,A2|Val]; % update value
-		(Inf_Elem, _Inf_Update) -> Inf_Elem % pass value unchanged
-	     end,
-    Map = fun(Inf_elem) ->  %% Aplly updates to Inf_elem
-		  lists:foldl(fun(Update_elem, Acc) -> Filter(Acc, Update_elem)
-			      end, Inf_elem, Inf_update)
-	  end,
-    New_Inf=lists:map(Map, Parsed_Inf), %% call Map to every element of inf string
+    Foldl=fun(Cur_Update, Cur_Inf) -> inf_update_cur(Cur_Update, Cur_Inf, []) end,
+    New_Inf=lists:foldl(Foldl ,Parsed_Inf, Inf_update), %% call Map to every element of inf string
     string:join(["BINF", SID | New_Inf], " ").
 
 user_login(Sid,Nick,Cid,Args) ->
@@ -626,6 +632,14 @@ send_to_socket(Data, #state{socket=Socket, sid=Sid}) ->
     case (catch gen_tcp:send(Socket, [Data, "\n"])) of
 	ok ->
 	    ok;
+	{error,einval} ->
+	    ?DEBUG(error, "~w has error '{error,einval}' when sending '~p'\n", [Sid,Data]),
+	    case (catch gen_tcp:send(Socket, [utf8:to_utf8(Data), "\n"])) of
+		ok ->
+		    ok;
+		Error ->
+		    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
+	    end;
 	Error ->
 	    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
     end.

@@ -241,9 +241,10 @@ redirect_to(Pid, Sid, Hub) ->
     R_msg="You are redirected to "++Hub,
     eadc_utils:info_to_pid(Pid, R_msg),
     SID= if
-	     is_atom(Sid) -> atom_to_list(Sid);
+	     is_integer(Sid) -> unbase32(Sid);
 	     is_list(Sid) -> Sid
 	 end,
+    io:format("!~w\n", [SID]),
     eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RD"++Hub, "MS"++R_msg]}),
     gen_fsm:send_event(Pid, kill_your_self).
 
