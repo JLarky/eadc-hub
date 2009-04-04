@@ -207,10 +207,9 @@ Plugins:
 	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
 	"redirectsid" ->
-	    [SID_|_]=Args,SID=eadc_utils:unbase32(SID_),
-	    io:format("~p\n", [SID]),
-	    [Cl|_]=eadc_user:client_find(#client{sid=SID, _='_'}),
-	    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
+	    [SID_|_]=Args,Sid=eadc_utils:unbase32(SID_),
+	    io:format("~p\n", [Sid]),
+	    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
 	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
 	_ ->
