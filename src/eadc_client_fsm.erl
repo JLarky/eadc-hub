@@ -117,10 +117,12 @@ init([]) ->
 			Cid ->
 			    ok;
 			WRONGCID ->
-			    %%eadc_utils:broadcast(fun(Pid_to_inform) ->
-				%%			 eadc_utils:info_to_pid(Pid_to_inform,
-					%%					lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
-						%% end),
+			    eadc_utils:broadcast(
+			      fun(Pid_to_inform) ->
+				      eadc_utils:info_to_pid(
+					Pid_to_inform,
+					lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
+			      end),
 			    eadc_utils:info_to_pid(self(), "Your CID isn't corresponding to PID. You are cheater.")
 		    end,
 		    
@@ -187,9 +189,8 @@ init([]) ->
 			    end,
 			    New_Inf_full=inf_update(Client#client.inf, Inf_update),
 			    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
-			    
+			    client_write(Client#client{inf=New_Inf_full,login=Login}),
 			    eadc_utils:broadcast({string, New_Inf_to_send}),
-			    set_client_login(Login),
 			    {next_state, 'NORMAL STAGE', State};
 			Why ->
 			    io:format("kill"),
@@ -351,7 +352,7 @@ terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
 	_ -> ok
     end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
-    String_to_send = "IQUI "++ eadc_utils:base32(Sid) ++"\n",
+    String_to_send = "IQUI "++ eadc_utils:sid_to_s(Sid) ++"\n",
     eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{state, State}]),
     lists:foreach(fun(Pid) ->
 			  case Pid of
@@ -436,8 +437,8 @@ client_command(Header, Command, Args, Pids, State) ->
                 ?DEBUG(debud, "client_command: priv_msg hook ~p", [Data]),
                 Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},
                         {data, Data},{pids,Pids},{state, State}],
-                %%eadc_plugin:hook(priv_msg, Params);
-		[{data, Data},{pids,Pids}];
+		%%[{data, Data},{pids,Pids}];
+                eadc_plugin:hook(priv_msg, Params);
 	    {"B","INF"} ->
 		%% user not allow to change his CT or ID
 		Inf_update=lists:filter(fun(A) -> 
@@ -532,15 +533,9 @@ all_pids() ->
 	_Error -> []
     end.
 
-set_client_login(Login) ->
-    F=fun() ->
-	      [Client]=mnesia:match_object(#client{pid=self(),_='_'}),
-	      mnesia:write(Client#client{login=Login})
-      end,
-    {atomic, ok}=mnesia:transaction(F).
-
 test(String) ->
-    set_client_login(String).
+    String.
+    %%set_client_login(String).
     %%[Pid | _] =all_pids(),
     %%gen_fsm:send_event(Pid, {send_to_socket, String}).
 
