@@ -41,3 +41,8 @@
 	  nick="",
 	  cid="",
 	  info=[]}).
+
+-record(option, {
+	  id={other, key}, %% {ns, key} NameSpace, useful for plugin or module name
+	  val    %% value
+	 }).

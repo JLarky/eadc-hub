@@ -1,9 +1,9 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([convert/1, quote/1, unquote/1]).
--export([random_base32/1, base32/1, base32_encode/1,
-	unbase32/1, base32_decode/1]).
+-export([quote/1, unquote/1,s2a/1, a2s/1]).
+-export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
+	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
 -export([code_reload/1]).
 -export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, set_val/3]).
@@ -13,44 +13,14 @@
 
 -export([account_write/1, account_all/0, account_get/1, account_get_login/2]).
 
+-export([get_option/3, set_option/3, get_options/1]).
+
 -include("eadc.hrl").
 
-%% @spec convert({FromType::atom(), Arg::term()}) -> {Type::atom(), Val::term()}
-%% FromType = string | list | args
-%% Type = list | string
-%% @doc Converts <pre>
-%% {string, "some little string"} to {list, ["some", "little", "string"]}
-%% {list, ["some", "little string"}] to {string, "some little string"}
-%% {args, ["some", "little string"}] to {string, "some little\sstring"}
-%% </pre>
-convert({string, String}) ->
-    convert_string (String);
-convert({list, List}) when is_list(List) ->
-    convert_list(_Out=[], List);
-convert({args, List}) when is_list(List) ->
-    convert_args(_Out=[], List).
-
-convert_string(String) ->
-    {Bu, Ac} = lists:foldr(fun(Char, {Buf, Acc}) ->
-			 case Char of
-			     $\  -> {[], [Buf|Acc]};
-			     _ -> {[Char | Buf], Acc}
-			 end
-		 end, {[],[]}, String), {list, [Bu|Ac]}.
-
-convert_list(Out, []) ->
-    {string, Out};
-convert_list( [], [H|T]) when is_list(H)->
-    convert_list(H, T);
-convert_list(Out, [H|T]) when is_list(H)->
-    convert_list(Out++" "++H, T).
-
-convert_args(Out, []) ->
-    {string, Out};
-convert_args( [], [H|T]) when is_list(H)->
-    convert_args(quote(H), T);
-convert_args(Out, [H|T]) when is_list(H)->
-    convert_args(Out++" "++quote(H), T).
+%% @doc Converts <code>"some little\sstring" -> ["some", "little string"]</code>
+s2a(String) -> _Args=lists:map(fun unquote/1, string:tokens(String," ")).
+%% @doc Converts <code>%% ["some", "little string"] -> "some little\sstring"</code>
+a2s(Args) -> _String=string:join(lists:map(fun quote/1, Args), " ").
 
 %% @spec quote(string()) -> QutedString::string()
 %% @doc quotes space, newline and '\' characters. Like "Hello World" -> "Hello\sWorld"
@@ -85,19 +55,22 @@ unquote(String) ->
 				    end end, {[],[]}, String),
     lists:append(U_String, [Buf]).
 
-%% @type base32string() = [base32char()]
-%% @type base32char() = ABCDEFGHIJKLMNOPQRSTUVWXYZ234567
-%% @spec random_base32(integer()) -> base32string()
-%% @doc returns base32 encoded string with length Count
-random_base32(Count) ->
-    {A,B,C}=time(), 
+random(Max) ->
+    {A,B,C}=time(),
     {D,E,F}=random:seed(),
     random:seed(A+D+erlang:crc32(pid_to_list(self())),B+E, C+F),
-    random_base32(Count, []).
-random_base32(0, Output) ->
-    Output;
-random_base32(Count, Output) ->
-    random_base32(Count-1, Output)++base32(random:uniform(32)-1).
+    random:uniform(Max).
+
+random_string(Length) ->
+    random_string_(Length, "").
+
+random_string_(Length, Acc) when Length < 1->
+    Acc;
+random_string_(Length, Acc) ->
+    {A,B,C}=time(),
+    {D,E,F}=random:seed(),
+    random:seed(A+D+erlang:crc32(pid_to_list(self())),B+E, C+F),
+    random_string_(Length-1, [random:uniform(255)|Acc]).
 
 %% @spec base32(integer()) -> [base32char()]
 %% @doc returns base32 character corresponding to V like 1 -> 'B', 31 -> '7'.
@@ -138,12 +111,13 @@ base32_encode_(Bin, Out) ->
 %% @spec unbase32(base32char()) -> integer()
 %% @doc A=unbase32(base32(A))
 %% @see base32/1
-unbase32([V]) when ((V>64) and (V <91)) or ((V > 49) and (V < 56)) ->
-    if
-	V < 56 -> V-24;
-	V > 64 -> V-65
-    end;
-unbase32(String) ->
+unbase32([V]) when ((V >= $A) and (V =< $Z)) ->
+    V-$A;
+unbase32([V]) when ((V >= $2) and (V =< $7)) ->
+    V-$2+26;
+unbase32([V]) ->
+    throw({badarg, [V]});
+unbase32(String=[_|_]) ->
     lists:foldl(fun(Char, Acc) ->
 			Acc*32+unbase32([Char])
 		end, 0, String).
@@ -181,6 +155,19 @@ base32_decode_(Bits, Out) ->
 	<<H:7>> -> Out++[H bsl 1]
     end.
 
+fillA(I, String) when I < 1 ->
+    String;
+fillA(Count, String) ->
+    fillA(Count-1, [$A|String]).
+
+sid_to_s(Sid) ->
+    Sid_string=base32(Sid),
+    fillA(4-length(Sid_string), Sid_string).
+
+cid_to_s(Sid) ->
+    Sid_string=base32(Sid),
+    fillA(39-length(Sid_string), Sid_string).
+
 %% @spec code_reload(atom()) -> {module, Module} | {error, Error}
 %% @doc does 'make' and loads Module if it's possible.
 code_reload(Module) ->
@@ -198,7 +185,7 @@ code_reload(Module) ->
 %% @see get_val/2
 %% @see deparse_inf/1
 parse_inf(Inf) ->
-    {list, List} = convert({string, Inf}),
+    List = s2a(Inf),
     lists:map(fun([H1,H2|T]) ->
 		      {list_to_atom([H1,H2]), T}
 	      end, List).
@@ -233,15 +220,15 @@ send_to_pids(Pids, Param) when is_list(Pids) ->
 %% Param = {list, List} | {args, List} | List
 %% List = string()
 %% @doc applies {@link convert/1} to Param if needed and sends String to socket controlled by gen_fsm with pid Pid
-send_to_pid(Pid, {list, List}) when is_list(List) ->
-    {string, String} = eadc_utils:convert({list, List}),
-    eadc_utils:send_to_pid(Pid, String);
+%%send_to_pid(Pid, {list, List}) when is_list(List) ->
+%%    {string, String} = eadc_utils:convert({list, List}),
+%%    eadc_utils:send_to_pid(Pid, String);
 send_to_pid(Pid, {args, List}) when is_list(List) ->
-    {string, String} = eadc_utils:convert({args, List}),
+    String = eadc_utils:a2s(List),
     eadc_utils:send_to_pid(Pid, String);
 send_to_pid(Pid, String) when is_pid(Pid) and is_list(String) ->
     gen_fsm:send_event(Pid, {send_to_socket, String});
-send_to_pid(undefined, String) when is_list(String) ->
+send_to_pid(Atom, String) when is_atom(Atom) andalso is_list(String) ->
     ok;
 send_to_pid(Unknown1, Unknown2) ->
     ?DEBUG(error, "send_to_pid(~w, ~w)\n", [Unknown1, Unknown2]).
@@ -267,13 +254,14 @@ info_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "000", Message]}).
 
 redirect_to(Pid, Sid, Hub) ->
-    R_msg="You are redirected to dchub://jlarky.punklan.net",
+    R_msg="You are redirected to "++Hub,
     eadc_utils:info_to_pid(Pid, R_msg),
     SID= if
-	     is_atom(Sid) -> atom_to_list(Sid);
+	     is_integer(Sid) -> unbase32(Sid);
 	     is_list(Sid) -> Sid
 	 end,
-    eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RDdchub://jlarky.punklan.net", "MS"++R_msg]}),
+    io:format("!~w\n", [SID]),
+    eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RD"++Hub, "MS"++R_msg]}),
     gen_fsm:send_event(Pid, kill_your_self).
 
 get_required_field(Key, PInf) ->
@@ -358,4 +346,33 @@ account_get_login(Nick, Cid) ->
 	    {login, Log};
 	_ ->
 	    false
+    end.
+
+
+get_option(Ns, Key, Default) ->
+    F = fun()->
+		mnesia:match_object(#option{id={Ns, Key}, _='_'})
+	end,
+    case (catch mnesia:transaction(F)) of
+	{atomic, [Val|_]=List} when is_list(List) ->
+	    Val#option.val;
+	_ ->
+	    Default
+    end.
+
+set_option(Ns, Key, Val) ->
+    F = fun()->
+		mnesia:write(#option{id={Ns, Key}, val=Val})
+	end,
+    (catch mnesia:transaction(F)).
+
+get_options(OptionTemplate) when is_record(OptionTemplate, option)->
+    F = fun()->
+		mnesia:match_object(OptionTemplate)
+	end,
+    case (catch mnesia:transaction(F)) of
+	{atomic, List} when is_list(List) ->
+	    List;
+	Error ->
+	    {error, Error}
     end.

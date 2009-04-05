@@ -18,6 +18,14 @@
 		       _ -> ok
 		   end).
 
+-export([init/0,terminate/0]).
+
+init() ->
+     ok.
+terminate() ->
+     ok.
+
+
 chat_msg(Args) ->
     ?DEBUG(debug, "plugin 10 lines === ~w", [Args]),
     ?ETS_CHECK,
@@ -45,7 +53,7 @@ chat_msg(Args) ->
 
 user_login(Args) ->
     ?GET_VAL(pid, Pid),
-    ?DEBUG(debug, "~w: user_login ~w", [?MODULE, Pid]),
+    ?DEBUG(error, "~w: user_login ~w", [?MODULE, Pid]),
     ?ETS_CHECK,
 
     case catch ets:lookup(plugin_ten_lines, ten_lines) of

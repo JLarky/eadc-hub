@@ -10,11 +10,22 @@
 -include("eadc.hrl").
 -include("eadc_plugin.hrl").
 
+-export([init/0,terminate/0]). %% required
+
 -export([chat_msg/1]). %% some hook that you want to catch
+
+%% @spec init() -> ok | {error, String}
+%% @doc do init stuff and returns ok or {error, Message} if something's going wrong
+init() ->
+    ok.
+%% @spec terminate() -> ok | {error, String}
+%% @doc do terminate stuff and returns ok or {error, Message} if something's going wrong
+terminate() ->
+    ok.
 
 chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]), %% it's appear in debug
-    ?GET_VAL(msg, Msg), %% macro for extracting 'msg' param from 'Args'
+    Msg=eadc_utils:get_val(msg, Args), %% extracting 'msg' param from 'Args'
 
     %% send message to sender
     eadc_utils:info_to_pid(self(), "I see your message! You just wrote: "

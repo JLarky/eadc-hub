@@ -9,27 +9,42 @@
 -include("eadc.hrl").
 -include("eadc_plugin.hrl").
 
+-export([init/0,terminate/0]).
+
+init() ->
+     ok.
+terminate() ->
+     {error, "This plugin can't be stopped"}.
+
 init(Args) ->
-    Cid=eadc_client_fsm:get_unical_cid(eadc_utils:random_base32(39)),
+    Cid=eadc_client_fsm:get_unical_cid(),
     Sid=eadc_client_fsm:get_unical_SID(),
     Nick="test-room",
-    Inf="BINF "++Sid++" CT5"++" ID"++Cid++" NI"++Nick++" DEтестовая\\sкомната",
-    eadc_client_fsm:client_write(#client{cid=Cid, sid=list_to_atom(Sid), nick=Nick, inf=Inf, pid=undefined}),
+    Inf="BINF "++eadc_utils:sid_to_s(Sid)++" CT5"++" ID"++Cid++" NI"++Nick++" DEтестовая\\sкомната",
+    eadc_client_fsm:client_write(#client{cid=Cid, sid=Sid, nick=Nick, inf=Inf, pid=undefined}),
     Args.
 
+topic_to_pids(Pids) ->
+    Topic=eadc_utils:get_option(mainchat, topic, "No topic set"),
+    HubName=eadc_utils:get_option(hub, name, "EADC. ADC hub written in Erlang"),
+    F=fun(P) -> eadc_utils:send_to_pid(P, {args, ["IINF", "CT32", "VEJLarky's hub", "NI"++HubName, "DE"++Topic]}) end,
+    lists:foreach(F, Pids).
 
 user_login(Args) ->
     eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
 					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
+    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Admin\\redirect",
+					   "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]\n", "CT2"]}),
 
-	%%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
-    eadc_utils:send_to_pid(self(), {args, ["IINF", "CT32", "VEJLarky's hub", "NIEADC-hub", "DE}{абе"]}),
+    %%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
+    topic_to_pids([self()]),
     eadc_utils:info_to_pid(self(), "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
     Args.
 
 chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
     ?GET_VAL(msg, Msg),
+    ?GET_VAL(data, Data),
     case Msg of 
 	[$!|Command] -> %% command
 	    {ok, Params}=regexp:split(Command, " "),
@@ -39,7 +54,7 @@ chat_msg(Args) ->
 	    Args1=lists:keyreplace(msg, 1, Args, {msg, []}),
 	    lists:keyreplace(pids, 1, Args1, {pids, []});
 	_ -> 
-	    Args
+	    lists:keyreplace(data, 1, Args, {data, lists:sublist(Data, 512)})
     end.
 
 do_command([Command|Args], State, Client) ->
@@ -47,13 +62,22 @@ do_command([Command|Args], State, Client) ->
 	"help" ->
 	    Hlp="All hub commands:
 User's commands:
- !help - show this help
- !regme <password> - register new user with password <password>'
- !userlist - show all users with hidden passwords
+ !help - shows this help
+ !regme <password> - registers new user with password <password>
+ !userlist - shows all users with hidden passwords
 
 Admin's commands:
- !regclass <user> <class> - change users's class to <class>
- !userlist - show all users with their's passwords
+ !regclass <user> <class> - changes user's class to <class>
+ !userlist - shows all users with their passwords
+ !topic <topic> - sets hub's topic
+ !getconfig - shows all set options
+ !setconfig <key> <val> - sets hub's option 
+
+Plugins:
+ !plugin on <plugin> - turns on plugin and adds it to autostart
+ !plugin off <plugin> - turns off plugin and removes it from autostart
+ !pluginlist - shows all running plugins
+
 ",
 	    eadc_utils:info_to_pid(self(), Hlp);
 	"regnewuser" ->
@@ -73,7 +97,6 @@ Admin's commands:
 	    case eadc_user:access('kick any') of
 		true ->
 		    try
-			?DEBUG(error, "!!! ~w", []),
 			[User|_]=Args,UserName=Client#client.nick,
 			[User_Client]=eadc_user:client_find(#client{nick=User, _='_'}),
 			Pid_to_kill=User_Client#client.pid,
@@ -107,6 +130,88 @@ Admin's commands:
 		    New_List=lists:map(fun(A) -> A#account{pass="***"} end, List)
 	    end,
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Users:\n~p", [New_List])));
+	"topic" ->
+	    case eadc_user:access('change topic') of
+		true ->
+		    Topic=string:join(Args, " "),
+		    Ok=eadc_utils:set_option(mainchat, topic, Topic),
+		    AllPids=eadc_client_fsm:all_pids(),
+		    topic_to_pids(AllPids);		    
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"setconfig" ->
+	    case eadc_user:access('set config') of
+		true ->
+		    [Key | Rest] = Args,
+		    Val=string:join(Rest, " "),
+		    Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val);
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"getconfig" ->
+	    case eadc_user:access('get config') of
+		true ->
+		    AllOptions=eadc_utils:get_options({option, {hub, '_'}, '_'}),
+		    Options=lists:map(fun(E) -> {hub, Key}=E#option.id, Val=E#option.val, atom_to_list(Key)++" => '"++Val++"'\n" end, AllOptions),
+		    Out=string:join(Options, " "),
+		    eadc_utils:info_to_pid(self(), "Config list:\n"++Out);
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"plugin" ->
+	    case eadc_user:access('plugin manage') of
+                true ->
+		    {MName,F,M}=case Args of
+				    ["on", Name|_] ->
+					{list_to_atom(Name),init, "initialized."};
+				    ["off", Name|_] ->
+					{list_to_atom(Name),terminate, "terminated"};
+				    _ ->
+					eadc_utils:info_to_pid(self(), "Wrong parametrs."),
+					{"","",""}
+				end,
+		    case (catch MName:F()) of
+			{'EXIT',{undef,[{MName,F,[]}|_]}} ->
+			    eadc_utils:error_to_pid(self(), "Plugin "++atom_to_list(MName)
+						    ++" can't be "++M++".");
+			ok ->
+			    PL=eadc_plugin:get_plugins(),
+			    case F of
+				init ->
+				    eadc_plugin:set_plugins(PL++[MName]);
+				terminate ->
+				    eadc_plugin:set_plugins(lists:delete(MName,PL))
+			    end,
+			    eadc_utils:info_to_pid(self(), "Plugin "++atom_to_list(MName)
+						   ++" have been "++M++".");
+			{error, Error} ->
+			    eadc_utils:info_to_pid(self(), lists:flatten(Error))
+		    end;
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"pluginlist" ->
+	    case eadc_user:access('plugin manage') of
+                true ->
+		    PL=eadc_plugin:get_plugins(),
+		    Out=lists:foldl(fun(Pname, Acc) -> Acc++"\n"++atom_to_list(Pname) end,"",PL),
+		    eadc_utils:info_to_pid(self(), Out);
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"redirect" ->
+	    [Nick|_]=Args,
+	    [Cl|_]=eadc_user:client_find(#client{nick=Nick, _='_'}),
+	    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
+	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
+	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
+	"redirectsid" ->
+	    [SID_|_]=Args,Sid=eadc_utils:unbase32(SID_),
+	    io:format("~p\n", [Sid]),
+	    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
+	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
+	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
 	_ ->
 	    io:format("~s", [Command]),
 	    eadc_utils:info_to_pid(self(), "Unknown command"),

@@ -22,16 +22,10 @@
 %% Description: function prepare mnesia tables or create them if missing
 %%--------------------------------------------------------------------
 init() ->
-    T=account,
-    case lists:member(T, mnesia:system_info(tables)) of
-	true ->
-	    mnesia:wait_for_tables([T], 10000);
-	false ->
-	    mnesia:create_table(T,
-				[{attributes,
-				  record_info(fields, account)},
-				 {disc_copies, [node()]}])
-    end,
+    eadc_app:start_table(account, [{attributes,
+				    record_info(fields, account)},
+				   {disc_copies, [node()]}], []),
+    
     create_admin_account().
 
 %%--------------------------------------------------------------------

@@ -14,6 +14,14 @@
 -export([user_login/1, chat_msg/1, user_quit/1,
 	 master_command/1]).
 
+-export([init/0,terminate/0]).
+
+init() ->
+     ok.
+terminate() ->
+     ok.
+
+
 user_login(Args) ->
     ?DEBUG(debug, "user_l: ~w~n", [Args]),
     ?GET_VAL(sid, Sid),
