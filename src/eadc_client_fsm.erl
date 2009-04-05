@@ -26,8 +26,6 @@
 
 -export([client_get/1, client_write/1, client_delete/1,client_all/0]).
 
--export([client_get/1, client_write/1]).
-
 -define(TIMEOUT, 120000).
 -include("eadc.hrl").
 
