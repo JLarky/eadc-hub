@@ -182,9 +182,10 @@ init([]) ->
 		true ->
 		    case Func() of %% user_login
 			Client when is_record(Client, client) ->
-			    if (Account#account.class > 2) ->
+			    case lists:member(root,Account#account.roles) of
+				true ->
 				    Inf_update=["CT4"];
-			       true ->
+				false ->
 				    Inf_update=["CT2"]
 			    end,
 			    New_Inf_full=inf_update(Client#client.inf, Inf_update),

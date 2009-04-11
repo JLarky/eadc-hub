@@ -78,6 +78,11 @@ Plugins:
  !plugin off <plugin> - turns off plugin and removes it from autostart
  !pluginlist - shows all running plugins
 
+Roles:
+ !addtorole <role> <permission> - addes permission to role
+ !delfromrole <role> <permission> - deletes permission from role
+ !addrole <role> <login> - addes role to login
+ !delrole <role> <login> - deletes role from login
 ",
 	    eadc_utils:info_to_pid(self(), Hlp);
 	"regnewuser" ->
@@ -91,8 +96,21 @@ Plugins:
 	    end;
 	"regme" ->
 	    [Pass|_]=Args,UserName=Client#client.nick,
-	    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,pass=Pass}),
-	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Password of user ~s was set to '~s'", [UserName, Pass])));
+	    case mnesia:table_info(account, size) of
+		0 -> %% first user
+		    eadc_utils:info_to_pid(self(), "Register superuser."),
+		    Roles=[root];
+		_ ->
+		    Roles=[]
+	    end,
+	    case eadc_user:access('self registration') or (Roles==[root]) of
+		true ->
+		    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,
+								   pass=Pass,roles=Roles}),
+		    eadc_utils:info_to_pid(self(), "User '"++UserName++"' was registered");
+		false ->
+		    eadc_utils:error_to_pid(self(), "You don't have permission.")
+	    end;
 	"kick" ->
 	    case eadc_user:access('kick any') of
 		true ->
@@ -107,17 +125,6 @@ Plugins:
 			error:{badmatch,[]} ->
 			    eadc_utils:info_to_pid(self(), "User not found.")
 		    end;
-		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
-	    end;
-	"regclass" ->
-	    case eadc_user:access('reg class') of
-		true ->
-		    [Login, Class|_]=Args,
-		    Account=eadc_utils:account_get(Login),
-		    {atomic, ok}=eadc_utils:account_write(
-				   Account#account{class=list_to_integer(Class)}),
-		    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Class of user ~s was set to '~s'", [Login, Class])));
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
@@ -212,6 +219,33 @@ Plugins:
 	    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
 	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
 	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
+	Role_ when (Role_=="addtorole") or (Role_=="delfromrole") ->
+	    [Role|Perm]=Args,Permission=string:join(Perm, " "),
+	    case mnesia:dirty_read(permission, list_to_atom(Permission)) of
+		[Perms] ->
+		    Roles=Perms#permission.roles;
+		[] ->
+		    Roles=[]
+	    end,
+	    NewRoles=case Role_ of
+			        "addtorole" ->
+			     [list_to_atom(Role)|Roles];
+			 "delfromrole" ->
+			     lists:delete(list_to_atom(Role), Roles)
+				          end,
+	    mnesia:dirty_write(#permission{permission=list_to_atom(Permission),roles=NewRoles}),
+	    ok;
+	Role_ when (Role_=="addrole") or (Role_=="delrole") ->
+	    [Role|Log]=Args,Login=string:join(Log, " "),
+	    Acc=eadc_utils:account_get(Login),
+	    Roles=Acc#account.roles,
+	    NewRoles=case Role_ of
+			 "addrole" ->
+			     [list_to_atom(Role)|Roles];
+			 "delrole" ->
+			     lists:delete(list_to_atom(Role), Roles)
+		     end,
+	    eadc_utils:account_write(Acc#account{roles=NewRoles});
 	_ ->
 	    io:format("~s", [Command]),
 	    eadc_utils:info_to_pid(self(), "Unknown command"),

@@ -11,7 +11,7 @@ And check it on adc://localhost:4111
 
 Also try run "!help" in chat.
 
-Default admin user is Admin, you can change that in ./ebin/eadc.cfg
+First registered user (by !regme pass) will be superuser.
 
 
 Requirements:
