@@ -22,7 +22,7 @@
 -export([all_pids/0,inf_update/2]).
 
 %% DEBUG
--export([test/1, get_pid_by_sid/1, get_unical_cid/0,get_unical_SID/0]).
+-export([test/1, get_pid_by_sid/1, get_unical_cid/1,get_unical_SID/0]).
 
 -export([client_get/1, client_write/1, client_delete/1,client_all/0]).
 
@@ -78,10 +78,11 @@ init([]) ->
     ?DEBUG(debug, "Data recived in PROTOCOL '~s'~n", [Data]),
     case Data of
 	[ $H,$S,$U,$P,$\  | _] ->
+	    {A,B,C}=time(), random:seed(A,B,C),
 	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
 	    Sid = get_unical_SID(),
-	    ok = gen_tcp:send(Socket, ["ISID ",eadc_utils:sid_to_s(Sid), "\n"]),
-	    {next_state, 'IDENTIFY STAGE', State#state{sid=Sid}, ?TIMEOUT};
+	    ok = gen_tcp:send(Socket, ["ISID ",Sid, "\n"]),
+	    {next_state, 'IDENTIFY STAGE', State#state{sid=eadc_utils:unbase32(Sid)}, ?TIMEOUT};
 	_ ->
 	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
 	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
@@ -98,7 +99,7 @@ init([]) ->
     case List of
 	["BINF", SID | _] ->
 	    gen_tcp:send(Socket, "IINF CT32 VEEADC NIHub DE \n"),
-	    case SID == eadc_utils:sid_to_s(Sid) of
+	    case SID == eadc_utils:base32(Sid) of
 		false ->
 		    gen_tcp:send(Socket,["ISTA 240 ",eadc_utils:quote("SID is not correct"),"\n"]),
 		    {stop, normal, State};	    
@@ -117,12 +118,10 @@ init([]) ->
 			Cid ->
 			    ok;
 			WRONGCID ->
-			    eadc_utils:broadcast(
-			      fun(Pid_to_inform) ->
-				      eadc_utils:info_to_pid(
-					Pid_to_inform,
-					lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
-			      end),
+			    %%eadc_utils:broadcast(fun(Pid_to_inform) ->
+				%%			 eadc_utils:info_to_pid(Pid_to_inform,
+					%%					lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
+						%% end),
 			    eadc_utils:info_to_pid(self(), "Your CID isn't corresponding to PID. You are cheater.")
 		    end,
 		    
@@ -142,7 +141,7 @@ init([]) ->
 
 		    case need_authority(Nick, Cid) of
 			true ->
-			    Random=tiger:hash(eadc_utils:random_string(24)),
+			    Random=tiger:hash(eadc_utils:random_base32(39)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
 			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
 			false ->
@@ -182,15 +181,17 @@ init([]) ->
 		true ->
 		    case Func() of %% user_login
 			Client when is_record(Client, client) ->
-			    if (Account#account.class > 2) ->
+			    case lists:member(root,Account#account.roles) of
+				true ->
 				    Inf_update=["CT4"];
-			       true ->
+				false ->
 				    Inf_update=["CT2"]
 			    end,
 			    New_Inf_full=inf_update(Client#client.inf, Inf_update),
 			    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
-			    client_write(Client#client{inf=New_Inf_full,login=Login}),
+			    
 			    eadc_utils:broadcast({string, New_Inf_to_send}),
+			    set_client_login(Login),
 			    {next_state, 'NORMAL STAGE', State};
 			Why ->
 			    io:format("kill"),
@@ -201,11 +202,10 @@ init([]) ->
 			I when is_integer(I) and (I > 0) ->
 			    timer:sleep(1000),
 			    eadc_utils:send_to_pid(self(), {args, ["ISTA", "123", "Wrong password"]}),
-			    New_Random=tiger:hash(eadc_utils:random_string(24)),
+			    New_Random=tiger:hash(eadc_utils:random_base32(39)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(New_Random)]}),
 			    {next_state, 'VERIFY STAGE', State#state{random=New_Random, triesleft=I}, ?TIMEOUT};
 			_Other ->
-			    %% TODO: send message to user
 			    {stop, normal, State}
 		    end
 	    end;
@@ -331,9 +331,6 @@ handle_info({master, Data}, StateName, StateData) ->
 handle_info({'EXIT',Pid, Reason}, StateName, StateData) ->
     ?DEBUG(error, "this guy ~w just die: ~w\n", [Pid, Reason]),
     {next_state, StateName, StateData};    
-handle_info({tcp_error,_,Error}, _StateName, StateData) ->
-    ?DEBUG(error, "tcp_error ~w\n", [Error]),
-    {stop, normal, StateData};    
 handle_info(Info, StateName, StateData) ->
     ?DEBUG(error, "Unknown info ~w\n", [Info]),
     {noreply, StateName, StateData}.
@@ -352,7 +349,7 @@ terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
 	_ -> ok
     end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
-    String_to_send = "IQUI "++ eadc_utils:sid_to_s(Sid) ++"\n",
+    String_to_send = "IQUI "++ eadc_utils:base32(Sid) ++"\n",
     eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{state, State}]),
     lists:foreach(fun(Pid) ->
 			  case Pid of
@@ -434,11 +431,11 @@ client_command(Header, Command, Args, Pids, State) ->
 		Msg=get_val(par, Args),
 		Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
                 Nick=Client#client.nick,
-                ?DEBUG(debud, "client_command: priv_msg hook ~p", [Data]),
+                ?DEBUG(debud, "client_command: priv_msg hook ~s", [Data]),
                 Params=[{pid,self()},{msg,Msg},{sid,Sid},{nick,Nick},
                         {data, Data},{pids,Pids},{state, State}],
-		%%[{data, Data},{pids,Pids}];
-                eadc_plugin:hook(priv_msg, Params);
+                %%eadc_plugin:hook(priv_msg, Params);
+		[{data, Data},{pids,Pids}];
 	    {"B","INF"} ->
 		%% user not allow to change his CT or ID
 		Inf_update=lists:filter(fun(A) -> 
@@ -478,20 +475,21 @@ get_val(Key, Args) ->
     eadc_utils:get_val(Key, Args).
 
 get_unical_SID() ->
-    Sid=eadc_utils:random(1048575), %% 20 bit
+    Sids=eadc_utils:random_base32(4), %% TODO: delete that
+    Sid=eadc_utils:unbase32(Sids),
     MatchHead = #client{sid='$1', _='_'},Guard = [{'==', '$1', Sid}],Result = '$1',
     F = fun() ->
 		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
 	end,
     case catch mnesia:transaction(F) of
 	{atomic, []} -> %% not used SID
-	    Sid;
+	    Sids;
 	{atomic, [_|_]} -> %% CID allready in use, generate new
 	    get_unical_SID();
 	Error -> {error, Error} 
     end.
 
-get_pid_by_sid(Sid) when is_integer(Sid) ->
+get_pid_by_sid(Sid) when is_atom(Sid) ->
     MatchHead = #client{sid='$1', pid='$2', _='_'},Guard = [{'==', '$1', Sid}],Result = '$2',
     F = fun() ->
 		mnesia:select(client,[{MatchHead, Guard, [Result]}])	
@@ -505,10 +503,6 @@ get_pid_by_sid(Sid) when is_integer(Sid) ->
 get_pid_by_sid(Sid) when is_list(Sid)->
     get_pid_by_sid(eadc_utils:unbase32(Sid)).
 
-get_unical_cid() ->
-    Cid=eadc_utils:random((1 bsl 192)-1), %% 192 bit
-    get_unical_cid(eadc_utils:cid_to_s(Cid)).
-
 get_unical_cid(Cid) ->
     MatchHead = #client{cid='$1', _='_'},Guard = [{'==', '$1', Cid}],Result = '$1',
     F = fun() ->
@@ -518,7 +512,7 @@ get_unical_cid(Cid) ->
 	{atomic, []} -> %% not used CID
 	    Cid;
 	{atomic, [_|_]} -> %% CID allready in use, generate new
-	    get_unical_cid("CIDINUSE"++lists:sublist(eadc_utils:cid_to_s(eadc_utils:random((1 bsl 192)-1)) ,31));
+	    get_unical_cid("CIDINUSE"++eadc_utils:random_base32(31));
 	Error -> {error, Error} 
     end.
 
@@ -533,27 +527,30 @@ all_pids() ->
 	_Error -> []
     end.
 
+set_client_login(Login) ->
+    F=fun() ->
+	      [Client]=mnesia:match_object(#client{pid=self(),_='_'}),
+	      mnesia:write(Client#client{login=Login})
+      end,
+    {atomic, ok}=mnesia:transaction(F).
+
 test(String) ->
-    String.
-    %%set_client_login(String).
+    set_client_login(String).
     %%[Pid | _] =all_pids(),
     %%gen_fsm:send_event(Pid, {send_to_socket, String}).
 
 
-inf_update_cur(Update, [], Acc) ->
-    [Update|Acc];            %% adds new field
-inf_update_cur([A1,A2], [[A1,A2|_Val]|Tail], Acc) ->
-    Tail++Acc;               %% deletes empthy field
-inf_update_cur([A1,A2|Val], [[A1,A2|_Val]|Tail], Acc) ->
-    [[A1,A2|Val]|Tail++Acc]; %% change field value
-inf_update_cur(Cur_Update, [Cur_Inf|Tail], Acc) ->
-    inf_update_cur(Cur_Update, Tail, [Cur_Inf|Acc]).
-
-
 inf_update(Inf, Inf_update) ->
     ["BINF", SID |Parsed_Inf]=string:tokens(Inf, " "),
-    Foldl=fun(Cur_Update, Cur_Inf) -> inf_update_cur(Cur_Update, Cur_Inf, []) end,
-    New_Inf=lists:foldl(Foldl ,Parsed_Inf, Inf_update), %% call Map to every element of inf string
+    Filter = fun([A1,A2|_],[A1,A2]) -> []; %% delete field if val is empty 
+		([A1,A2|_],[A1,A2|Val]) -> [A1,A2|Val]; % update value
+		(Inf_Elem, _Inf_Update) -> Inf_Elem % pass value unchanged
+	     end,
+    Map = fun(Inf_elem) ->  %% Aplly updates to Inf_elem
+		  lists:foldl(fun(Update_elem, Acc) -> Filter(Acc, Update_elem)
+			      end, Inf_elem, Inf_update)
+	  end,
+    New_Inf=lists:map(Map, Parsed_Inf), %% call Map to every element of inf string
     string:join(["BINF", SID | New_Inf], " ").
 
 user_login(Sid,Nick,Cid,Args) ->
@@ -630,14 +627,6 @@ send_to_socket(Data, #state{socket=Socket, sid=Sid}) ->
     case (catch gen_tcp:send(Socket, [Data, "\n"])) of
 	ok ->
 	    ok;
-	{error,einval} ->
-	    ?DEBUG(error, "~w has error '{error,einval}' when sending '~p'\n", [Sid,Data]),
-	    case (catch gen_tcp:send(Socket, [utf8:to_utf8(Data), "\n"])) of
-		ok ->
-		    ok;
-		Error ->
-		    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
-	    end;
 	Error ->
 	    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
     end.

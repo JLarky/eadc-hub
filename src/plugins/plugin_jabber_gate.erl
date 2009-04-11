@@ -121,11 +121,6 @@ connect(Host, Port, Vhost) ->
     %%io:format("NORMAL send ~s\n", [Bin]),
     case (catch gen_tcp:send(Socket, Bin)) of
 	ok -> ok;
-	{error,einval} ->
-	    case (catch gen_tcp:send(Socket, utf8:to_utf8(lists:flatten(Bin)))) of
-		ok -> ok;
-		Error -> ?DEBUG(error, "NORMAL send ~w\n\n", [Error])
-	    end;
 	Error ->
 	    ?DEBUG(error, "NORMAL send ~w\n\n", [Error])
     end,
@@ -263,7 +258,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 	    
 	    From_Sid=From_Client#client.sid,
 	    %%io:format("!!!!!! ~w", [Pid]),
-	    eadc_utils:send_to_pid(Pid, {args, ["BMSG", eadc_utils:sid_to_s(From_Sid), To_Send]}),
+	    eadc_utils:send_to_pid(Pid, {args, ["BMSG", atom_to_list(From_Sid), To_Send]}),
 	    %%io:format("handle_xml !!!!! ~w\n", [{message, From_Nick, To_Nick, Client#client.sid, Els, To_Send}]),
 	    ok;
 	"presence" ->
@@ -280,7 +275,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 			"unavailable" -> %% do logout
 			    Sid=Client#client.sid,
 			    eadc_client_fsm:client_delete(Sid),
-			    eadc_utils:broadcast({string, "IQUI "++eadc_utils:sid_to_s(Sid)}),
+			    eadc_utils:broadcast({string, "IQUI "++atom_to_list(Sid)}),
 			    %%io:format("LOGOUT ~s\n", [atom_to_list(Sid)]),
 			    ok;
 			_other -> %% do login
@@ -289,11 +284,11 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 				    ?DEBUG(error, "~s\n", [already_logged]);
 				_ ->
 				    ?DEBUG(error, "~s\n", [login]),
-				    Cid=eadc_client_fsm:get_unical_cid(),
+				    Cid=eadc_client_fsm:get_unical_cid(eadc_utils:random_base32(39)),
 				    Sid=eadc_client_fsm:get_unical_SID(),
-				    Inf="BINF "++eadc_utils:sid_to_s(Sid)++" ID"++Cid++" NI"++From_Nick++" DE"++Conf,
+				    Inf="BINF "++Sid++" ID"++Cid++" NI"++From_Nick++" DE"++Conf,
 				    eadc_utils:broadcast({string, Inf}),
-				    eadc_client_fsm:client_write(#client{cid=Cid, sid=Sid, nick=From_Nick, inf=Inf, pid=jabber_gate}),
+				    eadc_client_fsm:client_write(#client{cid=Cid, sid=list_to_atom(Sid), nick=From_Nick, inf=Inf, pid=jabber_gate}),
 				    ok
 			    end,
 			    ok

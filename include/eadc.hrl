@@ -26,7 +26,7 @@
 
 -record(client, {
 	  sid, %% SID. Key field
-	  pid, %% PID or {m, f, a}
+	  pid, %% PID or controlling plugin's name
 	  cid, %% client's CID
 	  nick,
 	  login,
@@ -37,12 +37,15 @@
 -record(account, {
 	  login="",
 	  pass="",
-	  class=1,
 	  nick="",
 	  cid="",
+	  roles="",
 	  info=[]}).
 
 -record(option, {
 	  id={other, key}, %% {ns, key} NameSpace, useful for plugin or module name
 	  val    %% value
 	 }).
+
+-record(role, {role, desc}).
+-record(permission, {permission, roles}).
