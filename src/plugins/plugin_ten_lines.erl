@@ -12,23 +12,17 @@
 
 -export([chat_msg/1, user_login/1, init/1]).
 
--define(ETS_CHECK, case ets:info(plugin_ten_lines) of
-		       undefined ->
-			   ets:new(plugin_ten_lines, [set, named_table, public]);
-		       _ -> ok
-		   end).
-
 -export([init/0,terminate/0]).
 
 init() ->
-     ok.
+    ok.
+init(Args) ->
+    Args.
 terminate() ->
-     ok.
+    ok.
 
 
 chat_msg(Args) ->
-    ?DEBUG(debug, "plugin 10 lines === ~w", [Args]),
-    ?ETS_CHECK,
     ?GET_VAL(msg, Msg), ?GET_VAL(sid, Sid),
     ?GET_VAL(pids, Pids), ?GET_VAL(nick, Nick),
     case Pids of 
@@ -36,8 +30,8 @@ chat_msg(Args) ->
 	    command_or_some_thing;
 	_Else ->
 	    New_Msg=[{{date(),time()}, Sid, eadc_utils:unquote(Msg), Nick}],
-	    case ets:lookup(plugin_ten_lines, ten_lines) of
-		[{ten_lines, [_|Tail]=Msgs}] ->
+	    case eadc_utils:get_option(ten_lines, tenlines, []) of
+		[_|Tail]=Msgs ->
 		    if length(Msgs) > 10 ->
 			    Old_Msgs=Tail;
 		       true ->
@@ -47,32 +41,26 @@ chat_msg(Args) ->
 		[] ->
 		    New_Msgs=New_Msg
 	    end,
-	    ets:insert(plugin_ten_lines, {ten_lines, New_Msgs})
+	    eadc_utils:set_option(ten_lines, tenlines, New_Msgs)
     end,
     Args.
 
 user_login(Args) ->
     ?GET_VAL(pid, Pid),
-    ?DEBUG(error, "~w: user_login ~w", [?MODULE, Pid]),
-    ?ETS_CHECK,
+    ?DEBUG(debug, "~w: user_login ~w", [?MODULE, Pid]),
 
-    case catch ets:lookup(plugin_ten_lines, ten_lines) of
-	{'Exit', _} -> %% беда
-	    Args;
-	[{ten_lines, Msgs}] ->
+    case catch eadc_utils:get_option(ten_lines, tenlines, []) of
+	Msgs=[_|_] ->
 	    Ten_lines = lists:foldl(fun({Time, _Sid, Msg, Nick}, Acc) ->
 					    lists:concat([Acc, Nick, " (",time_diff(Time),"):\n> ", Msg, "\n"])
 				    end, "Последние сообщения хаба:\n", Msgs),
 	    eadc_utils:info_to_pid(self(), Ten_lines),
 	    Args;
-	_ -> %% тоже беда
+	_ -> %% беда
 	    Args
     end.
 
 
-init(Args) ->
-    ?ETS_CHECK,
-    Args.
 
 
 time_diff(Time) ->
