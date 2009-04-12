@@ -247,11 +247,7 @@ Roles:
 		     end,
 	    eadc_utils:account_write(Acc#account{roles=NewRoles});
 	_ ->
-	    io:format("~s", [Command]),
-	    eadc_utils:info_to_pid(self(), "Unknown command"),
-	    Out=Command,
-	    Test=lists:flatten(io_lib:format("~w", [Out])),
-	    eadc_utils:error_to_pid(self(), Test)
+	    eadc_utils:info_to_pid(self(), "Unknown command '"++Command++"'")
     end.
 
 priv_msg(Args) ->
