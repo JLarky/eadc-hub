@@ -208,17 +208,25 @@ Roles:
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
 	"redirect" ->
-	    [Nick|_]=Args,
-	    [Cl|_]=eadc_user:client_find(#client{nick=Nick, _='_'}),
-	    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
-	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
-	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
+	    case eadc_user:access('redirect') of
+                true ->
+		    [Nick|_]=Args,
+		    [Cl|_]=eadc_user:client_find(#client{nick=Nick, _='_'}),
+		    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
+		    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net");
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
 	"redirectsid" ->
-	    [SID_|_]=Args,Sid=eadc_utils:unbase32(SID_),
-	    io:format("~p\n", [Sid]),
-	    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
-	    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net"),
-	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~w", [{Pid, Sid}])));
+	    case eadc_user:access('redirect') of
+		true ->
+		    [SID_|_]=Args,Sid=eadc_utils:unbase32(SID_),
+		    io:format("~p\n", [Sid]),
+		    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
+		    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net");
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
 	Role_ when (Role_=="addtorole") or (Role_=="delfromrole") ->
 	    [Role|Perm]=Args,Permission=string:join(Perm, " "),
 	    case mnesia:dirty_read(permission, list_to_atom(Permission)) of
