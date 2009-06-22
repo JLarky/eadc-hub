@@ -38,7 +38,15 @@ user_login(Args) ->
 
     %%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
     topic_to_pids([self()]),
-    eadc_utils:info_to_pid(self(), "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
+    Motd_cfg=eadc_utils:get_option(files, motd, "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
+    %% if Motd_conf is file use this file for MOTD
+    MOTD=case (catch file:read_file(Motd_cfg)) of
+	     {ok, Motd} ->
+		 binary_to_list(Motd);
+	     _ ->
+		 Motd_cfg
+	 end,
+    eadc_utils:info_to_pid(self(), MOTD),
     Args.
 
 chat_msg(Args) ->
@@ -78,6 +86,8 @@ Admin's commands:
  !topic <topic> - sets hub's topic
  !getconfig - shows all set options
  !setconfig <key> <val> - sets hub's option 
+ !setfile motd <Message> - sets MOTD
+ !setfile motd <filename> - sets MOTD
 
 Plugins:
  !plugin on <plugin> - turns on plugin and adds it to autostart
@@ -164,7 +174,8 @@ Roles:
 		true ->
 		    [Key | Rest] = Args,
 		    Val=string:join(Rest, " "),
-		    Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val);
+		    Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val),
+		    eadc_utils:info_to_pid(self(), "OK");
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
@@ -178,6 +189,16 @@ Roles:
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
+        "setfile" ->
+            case eadc_user:access('set files') of
+                true ->
+                    [Key | Rest] = Args,
+                    Val=string:join(Rest, " "),
+                    Ok=eadc_utils:set_option(files, list_to_atom(Key), Val),
+		    eadc_utils:info_to_pid(self(), "OK");
+                false ->
+                    eadc_utils:info_to_pid(self(), "You don't have permission.")
+            end;
 	"plugin" ->
 	    case eadc_user:access('plugin manage') of
                 true ->
