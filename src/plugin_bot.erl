@@ -50,7 +50,13 @@ chat_msg(Args) ->
 	    {ok, Params}=regexp:split(Command, " "),
 	    State=eadc_utils:get_val(state, Args),
 	    Client=eadc_utils:get_val(client, Args),
-	    do_command(Params, State, Client),
+	    try do_command(Params, State, Client)
+	    catch
+		throw:{error, Error} ->
+		    eadc_utils:error_to_pid(self(), Error);
+		  Error ->
+		    throw({error,Error})
+	    end,
 	    Args1=lists:keyreplace(msg, 1, Args, {msg, []}),
 	    lists:keyreplace(pids, 1, Args1, {pids, []});
 	_ -> 
@@ -92,7 +98,7 @@ Roles:
 		    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,pass=Pass}),
 		    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p", [Ok])));
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    throw({error, "You don't have permission."})
 	    end;
 	"regme" ->
 	    [Pass|_]=Args,UserName=Client#client.nick,
@@ -102,6 +108,12 @@ Roles:
 		    Roles=[root];
 		_ ->
 		    Roles=[]
+	    end,
+	    case Client#client.login of
+		'NO KEY' ->
+		    fine;
+		UserLogin ->
+		    throw({error,"You are allredy registered as '"++UserName++"'"})
 	    end,
 	    case eadc_user:access('self registration') or (Roles==[root]) of
 		true ->
@@ -169,34 +181,38 @@ Roles:
 	"plugin" ->
 	    case eadc_user:access('plugin manage') of
                 true ->
-		    {MName,F,M}=case Args of
-				    ["on", Name|_] ->
-					{list_to_atom(Name),init, "initialized."};
-				    ["off", Name|_] ->
-					{list_to_atom(Name),terminate, "terminated"};
-				    _ ->
-					eadc_utils:info_to_pid(self(), "Wrong parametrs."),
-					{"","",""}
-				end,
-		    case (catch MName:F()) of
-			{'EXIT',{undef,[{MName,F,[]}|_]}} ->
-			    eadc_utils:error_to_pid(self(), "Plugin "++atom_to_list(MName)
-						    ++" can't be "++M++".");
-			ok ->
-			    PL=eadc_plugin:get_plugins(),
-			    case F of
-				init ->
-				    eadc_plugin:set_plugins(PL++[MName]);
-				terminate ->
-				    eadc_plugin:set_plugins(lists:delete(MName,PL))
-			    end,
-			    eadc_utils:info_to_pid(self(), "Plugin "++atom_to_list(MName)
-						   ++" have been "++M++".");
-			{error, Error} ->
-			    eadc_utils:info_to_pid(self(), lists:flatten(Error))
-		    end;
+		    ok;
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    throw({error,"You don't have permission."})
+	    end,
+	    {MName,F,M}=case Args of
+			    ["on", Name|_] ->
+				{list_to_atom(Name),init, "initialized."};
+			    ["off", Name|_] ->
+				{list_to_atom(Name),terminate, "terminated"};
+			    _ ->
+				throw({error, "Wrong parametrs."})
+			end,
+	    PL=eadc_plugin:get_plugins(),
+	    New_PL=case {F,lists:member(MName,PL)} of
+		       {init, true} ->
+			   throw({error, "Plugin already loaded"});
+		       {terminate,false} ->
+			   throw({error, "Plugin not loaded"});
+		       {init, false} ->
+			   PL++[MName];
+		       {terminate,true} ->
+			   lists:delete(MName,PL)
+		   end,
+	    case (catch MName:F()) of
+		{'EXIT',{undef,[{MName,F,[]}|_]}} ->
+		    throw({error,"Plugin "++atom_to_list(MName)++" can't be "++M++"."});
+		ok ->
+		    eadc_plugin:set_plugins(New_PL),
+		    eadc_utils:info_to_pid(self(), "Plugin "++atom_to_list(MName)
+					   ++" have been "++M++".");
+		{error, Error} ->
+		    eadc_utils:info_to_pid(self(), lists:flatten(Error))
 	    end;
 	"pluginlist" ->
 	    case eadc_user:access('plugin manage') of

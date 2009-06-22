@@ -6,7 +6,7 @@
 
 -export([get_plugins/0, set_plugins/1]).
 
--define(PLUGINS, [plugin_bot, plugin_hub_merge, plugin_punklan]).
+-define(PLUGINS, [plugin_bot]).
 
 -include("eadc.hrl").
 

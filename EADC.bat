@@ -1,1 +1,1 @@
-cd ebin && erl -boot eadc
+cd ebin && erl -sname eadc -boot eadc
