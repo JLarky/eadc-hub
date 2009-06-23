@@ -20,8 +20,10 @@ hook(Hook, Args) ->
 		  {'EXIT',{undef,[{Plugin, Hook, _}|_]}} ->
 		      Acc_Args; %% don't change pids and data
 		  {'EXIT', Error} ->
-		      ?DEBUG(error, "Error in module ~s with hook ~s - ~w",
-			     [Plugin, Hook, Error]),
+		      Format="Error in plugin ~s, hook ~s - ~p\n\nPlease report to admin.",
+		      Msg=lists:flatten(io_lib:format(Format,[Plugin, Hook, Error])),
+		      eadc_utils:info_to_pid(self(), Msg),
+		      ?DEBUG(error, Msg, []),
 		      Acc_Args; %% don't change pids and data
 		  New_Args ->
 		      ?DEBUG(debug, "~s:~s\n~w\n", [Plugin, Hook, New_Args]),

@@ -264,33 +264,47 @@ Roles:
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
-	Role_ when (Role_=="addtorole") or (Role_=="delfromrole") ->
+	Command when (Command=="addtorole") or (Command=="delfromrole") ->
+            case eadc_user:access('change permission') of
+                true ->  ok;
+                false -> throw({error,"You don't have permission."})
+            end,
 	    [Role|Perm]=Args,Permission=string:join(Perm, " "),
 	    case mnesia:dirty_read(permission, list_to_atom(Permission)) of
 		[Perms] ->
 		    Roles=Perms#permission.roles;
 		[] ->
 		    Roles=[]
-	    end,
-	    NewRoles=case Role_ of
-			        "addtorole" ->
-			     [list_to_atom(Role)|Roles];
-			 "delfromrole" ->
-			     lists:delete(list_to_atom(Role), Roles)
-				          end,
+	    end, NewRoles=
+		case {Command,lists:member(list_to_atom(Role),Roles)} of
+		    {"addtorole",false}  -> [list_to_atom(Role)|Roles];
+		    {"delfromrole",true} -> lists:delete(list_to_atom(Role), Roles);
+		    {"addtorole", true} -> throw({error, "Already added"});
+		    {"delfromrole", false} -> throw({error, "No such permission in role"})
+		end,
 	    mnesia:dirty_write(#permission{permission=list_to_atom(Permission),roles=NewRoles}),
-	    ok;
-	Role_ when (Role_=="addrole") or (Role_=="delrole") ->
+	    eadc_utils:info_to_pid(self(), "OK");
+	Command when (Command=="addrole") or (Command=="delrole") ->
+            case eadc_user:access('change permission') of
+                true ->  ok;
+                false -> throw({error,"You don't have permission."})
+            end,
 	    [Role|Log]=Args,Login=string:join(Log, " "),
 	    Acc=eadc_utils:account_get(Login),
-	    Roles=Acc#account.roles,
-	    NewRoles=case Role_ of
-			 "addrole" ->
-			     [list_to_atom(Role)|Roles];
-			 "delrole" ->
-			     lists:delete(list_to_atom(Role), Roles)
-		     end,
-	    eadc_utils:account_write(Acc#account{roles=NewRoles});
+	    Roles=case is_record(Acc,account) of
+		      true ->
+			  Acc#account.roles;
+		      _ ->
+			  throw({error, "Account not found. Name of account is case-sensative."})
+		  end, NewRoles=
+		case {Command,lists:member(list_to_atom(Role),Roles)} of
+		    {"addrole",false}-> [list_to_atom(Role)|Roles];
+		    {"delrole",true} -> lists:delete(list_to_atom(Role), Roles);
+		    {"addrole",true} -> throw({error, "Already added"});
+		    {"delrole",false}-> throw({error, "Account doesn't have this role"})
+		end,
+	    eadc_utils:account_write(Acc#account{roles=NewRoles}),
+	    eadc_utils:info_to_pid(self(), "OK");
 	_ ->
 	    eadc_utils:info_to_pid(self(), "Unknown command '"++Command++"'")
     end.
