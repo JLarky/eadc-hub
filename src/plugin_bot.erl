@@ -282,7 +282,14 @@ Roles:
 		    {"addtorole", true} -> throw({error, "Already added"});
 		    {"delfromrole", false} -> throw({error, "No such permission in role"})
 		end,
-	    mnesia:dirty_write(#permission{permission=list_to_atom(Permission),roles=NewRoles}),
+	    Record=#permission{permission=list_to_atom(Permission),roles=NewRoles},
+	    case NewRoles of
+		[] ->
+		    %% удаляет запись если удаляем последнюю роль из права.
+		    mnesia:dirty_delete_object(Record#permission{roles=Roles});
+		_ ->
+		    mnesia:dirty_write(Record)
+	    end,
 	    eadc_utils:info_to_pid(self(), "OK");
 	Command when (Command=="addrole") or (Command=="delrole") ->
             case eadc_user:access('change permission') of

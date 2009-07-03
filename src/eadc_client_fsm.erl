@@ -479,7 +479,7 @@ get_val(Key, Args) ->
     eadc_utils:get_val(Key, Args).
 
 get_unical_SID() ->
-    Sid=eadc_utils:random(1048575), %% 20 bit
+    Sid=eadc_utils:random(1048575), %% 20 bit and > 0 thatswhy can't be AAAA
     MatchHead = #client{sid='$1', _='_'},Guard = [{'==', '$1', Sid}],Result = '$1',
     F = fun() ->
 		mnesia:select(client,[{MatchHead, Guard, [Result]}])	

@@ -1,5 +1,0 @@
-
-1. eadc_client_fsm:get_unical_SID() may return sid 'AAAA' that is reserved for hub
-Subj. I'm just to lezy to fix it.
-//JLarky
-
