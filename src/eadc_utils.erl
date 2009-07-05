@@ -262,7 +262,7 @@ redirect_to(Pid, Sid, Hub) ->
 	 end,
     io:format("!~w\n", [SID]),
     eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RD"++Hub, "MS"++R_msg]}),
-    gen_fsm:send_event(Pid, kill_your_self).
+    gen_fsm:send_event(Pid, kill_yourself).
 
 get_required_field(Key, PInf) ->
     case (catch lists:keysearch(Key, 1, PInf)) of
@@ -271,7 +271,7 @@ get_required_field(Key, PInf) ->
 	Not_found_or_error ->
 	    ?DEBUG(error, "~w not fount required_field ~w: ~w", [self(), Key, Not_found_or_error]),
 	    error_to_pid(self(), lists:concat(["Required field ", Key, " not found"])),
-	    gen_fsm:send_event(self(), kill_your_self)
+	    gen_fsm:send_event(self(), kill_yourself)
     end.
 
 %% @spec get_val(atom(), TupleList1) -> Val::term() | 'NO KEY'

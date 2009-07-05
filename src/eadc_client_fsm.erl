@@ -253,8 +253,8 @@ init([]) ->
     send_to_socket(Data, State),
     {next_state, 'NORMAL STAGE', State};
 
-'NORMAL STAGE'(kill_your_self, State) ->
-    ?DEBUG(error, "~w killed by self", [self()]),
+'NORMAL STAGE'(kill_yourself, State) ->
+    ?DEBUG(error, "~w killed by (him/her/it)self", [self()]),
     {stop, normal, State};
 
 'NORMAL STAGE'({kill, Why}, State) ->

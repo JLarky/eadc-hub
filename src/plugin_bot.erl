@@ -133,16 +133,16 @@ Roles:
 		false ->
 		    eadc_utils:error_to_pid(self(), "You don't have permission.")
 	    end;
-	"kick" ->
-	    case eadc_user:access('kick any') of
+	"drop" ->
+	    case eadc_user:access('drop any') of
 		true ->
 		    try
 			[User|_]=Args,UserName=Client#client.nick,
 			[User_Client]=eadc_user:client_find(#client{nick=User, _='_'}),
 			Pid_to_kill=User_Client#client.pid,
-			eadc_utils:broadcast(fun(Pid) -> eadc_utils:info_to_pid(Pid, "OP "++UserName++" is trying to kick '"++User++"'") end),
+			eadc_utils:broadcast(fun(Pid) -> eadc_utils:info_to_pid(Pid, UserName++" dropped '"++User++"'") end),
 			timer:sleep(100),
-			gen_fsm:send_event(Pid_to_kill, kill_your_self)			
+			gen_fsm:send_event(Pid_to_kill, {kill, "Dropped"})
 		    catch
 			error:{badmatch,[]} ->
 			    eadc_utils:info_to_pid(self(), "User not found.")
