@@ -15,6 +15,8 @@
 
 -export([get_option/3, set_option/3, get_options/1]).
 
+-export([get_unix_timestamp/1]).
+
 -include("eadc.hrl").
 
 %% @doc Converts <code>"some little\sstring" -> ["some", "little string"]</code>
@@ -237,6 +239,8 @@ send_to_pid(Unknown1, Unknown2) ->
 %% Argument = {string, String::string} | fun()
 broadcast({string,String}) when is_list(String) -> 
     broadcast(fun(Client) -> send_to_pid(Client, String) end);
+broadcast({info,String}) when is_list(String) -> 
+    broadcast(fun(Client) -> info_to_pid(Client, String) end);
 broadcast(F) when is_function(F) ->
     lists:foreach(F, eadc_client_fsm:all_pids()).
 
@@ -376,3 +380,10 @@ get_options(OptionTemplate) when is_record(OptionTemplate, option)->
 	Error ->
 	    {error, Error}
     end.
+
+%% @doc get_unix_timestamp
+%% @spec
+%% @output
+get_unix_timestamp({_MegaSecs, _Secs, _MicroSecs}=TS) ->
+    calendar:datetime_to_gregorian_seconds( calendar:now_to_universal_time(TS) ) -
+	calendar:datetime_to_gregorian_seconds( {{1970,1,1},{0,0,0}}).

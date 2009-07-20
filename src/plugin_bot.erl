@@ -1,8 +1,8 @@
 -module(plugin_bot).
 
 -export([user_login/1,
-	 chat_msg/1
-	 %%init/1,
+	 chat_msg/1,
+	 init/1
 	 %%priv_msg/1
 	]).
 
@@ -12,11 +12,17 @@
 -export([init/0,terminate/0]).
 
 init() ->
-     ok.
+    eadc_app:start_table(ban, [{attributes,
+				record_info(fields, ban)},
+			       {disc_copies, [node()]}], []),
+    ok.
 terminate() ->
      {error, "This plugin can't be stopped"}.
 
 init(Args) ->
+    init().
+
+init_(Args) ->
     Cid=eadc_client_fsm:get_unical_cid(),
     Sid=eadc_client_fsm:get_unical_SID(),
     Nick="test-room",
@@ -33,12 +39,41 @@ topic_to_pids(Pids) ->
 user_login(Args) ->
     eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
 					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
-    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Admin\\redirect",
-					   "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]\n", "CT2"]}),
+%%    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Admin\\redirect",
+%%					   "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]\n", "CT2"]}),
 
     %%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
     topic_to_pids([self()]),
-    Motd_cfg=eadc_utils:get_option(files, motd, "Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang."),
+
+    %% check ban
+    Nick=eadc_utils:get_val(nick, Args),IP=eadc_utils:get_val(addr, Args),
+    %% banned nick ++ banned IP
+    BanList=mnesia:dirty_match_object(#ban{nick=Nick, _='_'})++
+	mnesia:dirty_match_object(#ban{ip=IP, _='_'}),
+    %% find ban with maximum time
+    MaxBan=lists:foldl(fun(#ban{time=Time}=Ban, #ban{time=MaxTime}=Acc_Ban) ->
+			       case (Time > MaxTime) of %% if bantime not expired
+				   true -> Ban;
+				   false -> Acc_Ban
+			       end
+		       end, #ban{time=0}, BanList), 
+
+    Now=eadc_utils:get_unix_timestamp(now()),
+    case (MaxBan#ban.time > Now) of
+	true -> %% user still banned
+	    #ban{op=OPName,reason=Reason}=MaxBan,
+	    BanMsg=eadc_utils:quote("Banned by "++OPName++". Reason: "++Reason),
+	    New_Args=eadc_utils:set_val(client, "ISTA 231 "++BanMsg, Args),
+	    New_Args;
+	false -> %% ban time is expired
+	    motd(),
+	    Args
+    end.
+
+motd() ->
+    %% MOTD
+    Motd_def="Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang.",
+    Motd_cfg=eadc_utils:get_option(files, motd, Motd_def),
     %% if Motd_conf is file use this file for MOTD
     MOTD=case (catch file:read_file(Motd_cfg)) of
 	     {ok, Motd} ->
@@ -46,8 +81,7 @@ user_login(Args) ->
 	     _ ->
 		 Motd_cfg
 	 end,
-    eadc_utils:info_to_pid(self(), MOTD),
-    Args.
+    eadc_utils:info_to_pid(self(), MOTD).
 
 chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),
@@ -81,13 +115,17 @@ User's commands:
  !userlist - shows all users with hidden passwords
 
 Admin's commands:
- !regclass <user> <class> - changes user's class to <class>
+ !regclass <username> <class> - changes user's class to <class>
  !userlist - shows all users with their passwords
  !topic <topic> - sets hub's topic
  !getconfig - shows all set options
  !setconfig <key> <val> - sets hub's option 
  !setfile motd <Message> - sets MOTD
  !setfile motd <filename> - sets MOTD
+
+Opertor's commands:
+!drop <username> <reason> - Drops user from hub
+!kick <username> <reason> - Bans user for 5 min and dropes from hub
 
 Plugins:
  !plugin on <plugin> - turns on plugin and adds it to autostart
@@ -136,17 +174,17 @@ Roles:
 	"drop" ->
 	    case eadc_user:access('drop any') of
 		true ->
-		    try
-			[User|_]=Args,UserName=Client#client.nick,
-			[User_Client]=eadc_user:client_find(#client{nick=User, _='_'}),
-			Pid_to_kill=User_Client#client.pid,
-			eadc_utils:broadcast(fun(Pid) -> eadc_utils:info_to_pid(Pid, UserName++" dropped '"++User++"'") end),
-			timer:sleep(100),
-			gen_fsm:send_event(Pid_to_kill, {kill, "Dropped"})
-		    catch
-			error:{badmatch,[]} ->
-			    eadc_utils:info_to_pid(self(), "User not found.")
-		    end;
+		    [UserName, Reason|_]=Args,OPName=Client#client.nick,
+		    drop(UserName, OPName, Reason);
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"kick" ->
+	    case eadc_user:access('kick any') of
+                true ->
+		    [UserName, Reason|_]=Args,OPName=Client#client.nick,
+		    ban(UserName, OPName, Reason),
+		    drop(UserName, OPName, Reason);
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
@@ -322,3 +360,35 @@ priv_msg(Args) ->
     Pid=list_to_pid("<0.119.0>"),
     A=eadc_utils:set_val(pids, eadc_client_fsm:all_pids(), Args),
     eadc_utils:set_val(data, "EMSG "++From_Sid++" KVSP "++Mesg++" PMKVSP", A).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Utils
+%%%%%
+
+drop(UserName, OPName, Reason) ->
+    try
+	[User_Client]=eadc_user:client_find(#client{nick=UserName, _='_'}),
+	Pid_to_kill=User_Client#client.pid,
+	eadc_utils:broadcast({info, UserName++" dropped by "++OPName++". Reason: "++Reason}),
+	gen_fsm:send_event(Pid_to_kill, {kill, "Dropped"})
+    catch
+	error:{badmatch,[]} ->
+	    eadc_utils:info_to_pid(self(), "User not found.")
+    end.
+
+ban(UserName, OPName, Reason) ->
+    Client=
+	case eadc_user:client_find(#client{nick=UserName, _='_'}) of
+	    [] -> throw({error, "User '"++UserName++"' not found."});
+	    [Client_]  -> Client_
+	end,
+    IP=Client#client.addr,
+    Time=5*60,
+    ban(UserName, OPName, IP, Time, Reason).
+
+ban(UserName, OPName, IP, Time, Reason) ->
+    Ban=#ban{nick=UserName, ip=IP, time=eadc_utils:get_unix_timestamp(now())+Time,
+	     op=OPName, reason=Reason},
+    ok=mnesia:dirty_write(Ban),
+    eadc_utils:info_to_pid(self(), "User '"++UserName++"' banned").

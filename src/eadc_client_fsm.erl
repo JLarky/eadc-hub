@@ -117,13 +117,10 @@ init([]) ->
 			Cid ->
 			    ok;
 			WRONGCID ->
-			    eadc_utils:broadcast(
-			      fun(Pid_to_inform) ->
-				      eadc_utils:info_to_pid(
-					Pid_to_inform,
-					lists:concat(["User '", Nick, "' has wrong CID (",WRONGCID,"). Be aware"]))
-			      end),
-			    eadc_utils:info_to_pid(self(), "Your CID isn't corresponding to PID. You are cheater.")
+			    Msg=lists:concat(["User '", Nick, "' has wrong CID (",
+					      WRONGCID,"). Be aware"]),
+			    eadc_utils:broadcast({info, Msg}),
+			    eadc_utils:info_to_pid(self(),"Your CID isn't corresponding to PID. You are cheater.")
 		    end,
 		    
 		    Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),
@@ -149,6 +146,8 @@ init([]) ->
 			    case user_login(Sid,Nick,Cid,Args) of %% user_login
 				Client when is_record(Client, client) ->
 				    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
+				{logoff, Logoff_Msg} ->
+				    logoff(Logoff_Msg, New_State);
 				Why ->
 				    {stop, Why, New_State}
 			    end
@@ -193,6 +192,8 @@ init([]) ->
 			    client_write(Client#client{inf=New_Inf_full,login=Login}),
 			    eadc_utils:broadcast({string, New_Inf_to_send}),
 			    {next_state, 'NORMAL STAGE', State};
+			{logoff, Logoff_Msg} ->
+			    logoff(Logoff_Msg, State);
 			Why ->
 			    io:format("kill"),
 			    {stop, Why, State}
@@ -259,7 +260,7 @@ init([]) ->
 
 'NORMAL STAGE'({kill, Why}, State) ->
     send_to_socket("ISTA 100 "++eadc_utils:quote(Why), State),
-    ?DEBUG(error, "~w killed: ~s ~w", [self(), Why]),
+    ?DEBUG(error, "~w killed: ~s~n", [self(), Why]),
     {stop, normal, State};
 
 'NORMAL STAGE'(Other, State) ->
@@ -566,12 +567,18 @@ user_login(Sid,Nick,Cid,Args) ->
     {data, Data_to_send}={data,get_val(data, Hooked_Args)},
     {client, Client}={client,get_val(client, Hooked_Args)},
     
-    lists:foreach(fun(#client{inf=CInf}) ->
-			  eadc_utils:send_to_pid(My_Pid, CInf)
-		  end, client_all()),
-    client_write(Client),
-    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
-    Client.
+    case is_record(Client, client) of
+	true ->
+	    lists:foreach(fun(#client{inf=CInf}) ->
+				  eadc_utils:send_to_pid(My_Pid, CInf)
+			  end, client_all()),
+	    client_write(Client),
+	    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
+	    Client;
+	false -> %% logoff
+	    Error=Client,
+	    {logoff, Error}
+    end.
 
 need_authority(Nick, Cid) ->
     MatchHead = #account{cid='$1', nick='$2', _='_'},
@@ -642,3 +649,7 @@ send_to_socket(Data, #state{socket=Socket, sid=Sid}) ->
 	Error ->
 	    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
     end.
+
+logoff(Msg, State) ->
+    send_to_socket(Msg, State),
+    {stop, normal, State}.

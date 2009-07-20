@@ -49,3 +49,4 @@
 
 -record(role, {role, desc}).
 -record(permission, {permission, roles}).
+-record(ban, {nick, ip, time, op, reason}).
