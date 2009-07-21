@@ -292,7 +292,7 @@ get_val(Key, Args) ->
 %% TupleLis2 = [{Key::atom(), Val::term()}]
 %% @doc replaces tuple {Key, OldVar} with {Key, Val} in list Args 
 set_val(Key, Val, Args) -> 
-    lists:keyreplace(Key, 1, Args, {Key, Val}).
+    lists:keystore(Key, 1, Args, {Key, Val}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%

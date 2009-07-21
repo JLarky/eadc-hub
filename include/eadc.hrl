@@ -18,6 +18,7 @@
 	  buf,       % buffer for client messages sended in several tcp pockets
 	  addr,      % client address
 	  sid,       % client's SID
+	  other=[],  % for store additional data
 	  login,     % user login
 	  random,    % random string that hub send to user
 	  triesleft, % amount of tries before hub kicks user

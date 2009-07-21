@@ -2,7 +2,8 @@
 
 -export([user_login/1,
 	 chat_msg/1,
-	 init/1
+	 init/1,
+	 user_quit/1
 	 %%priv_msg/1
 	]).
 
@@ -63,8 +64,11 @@ user_login(Args) ->
 	true -> %% user still banned
 	    #ban{op=OPName,reason=Reason}=MaxBan,
 	    BanMsg=eadc_utils:quote("Banned by "++OPName++". Reason: "++Reason),
-	    New_Args=eadc_utils:set_val(client, "ISTA 231 "++BanMsg, Args),
-	    New_Args;
+	    State=eadc_utils:get_val(state, Args),Other=State#state.other,
+	    New_State=State#state{other=eadc_utils:set_val(banned, true, Other)},
+	    New_Args1=eadc_utils:set_val(client, {logoff,"ISTA 231 "++BanMsg}, Args),
+	    New_Args2=eadc_utils:set_val(state, New_State, New_Args1),
+	    New_Args2;
 	false -> %% ban time is expired
 	    motd(),
 	    Args
@@ -82,6 +86,17 @@ motd() ->
 		 Motd_cfg
 	 end,
     eadc_utils:info_to_pid(self(), MOTD).
+
+user_quit(Args) ->
+    State=eadc_utils:get_val(state, Args),
+    Other=State#state.other,
+    Banned=eadc_utils:get_val(banned, Other),
+    case Banned of
+	true -> %% don't send QUI message for banned users, because they really didn't login
+	    New_Args=eadc_utils:set_val(msg, "", Args);
+	_ ->
+	    Args
+    end.
 
 chat_msg(Args) ->
     ?DEBUG(debug, "chat_msg: ~w~n", [Args]),

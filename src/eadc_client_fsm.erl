@@ -143,9 +143,12 @@ init([]) ->
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
 			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
 			false ->
-			    case user_login(Sid,Nick,Cid,Args) of %% user_login
+			    New_Args=user_login(Sid,Nick,Cid,Args), %% user_login
+			    {client, Client}={client, eadc_utils:get_val(client, New_Args)},
+			    case Client of %% user_login
 				Client when is_record(Client, client) ->
-				    {next_state, 'NORMAL STAGE', New_State, ?TIMEOUT};
+				    New_State2=eadc_utils:get_val(state, New_Args),
+				    {next_state, 'NORMAL STAGE', New_State2, ?TIMEOUT};
 				{logoff, Logoff_Msg} ->
 				    logoff(Logoff_Msg, New_State);
 				Why ->
@@ -179,7 +182,10 @@ init([]) ->
 	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", [Login,Addr,{Pass,C}]),
 	    case C==Pass of
 		true ->
-		    case Func() of %% user_login
+		    New_Args=Func(), %% user_login
+		    {client, Client}={client, eadc_utils:get_val(client, New_Args)},
+		    {state,New_State}={state,eadc_utils:get_val(state, New_Args)},
+		    case Client of
 			Client when is_record(Client, client) ->
 			    case lists:member(root,Account#account.roles) of
 				true ->
@@ -191,12 +197,12 @@ init([]) ->
 			    New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
 			    client_write(Client#client{inf=New_Inf_full,login=Login}),
 			    eadc_utils:broadcast({string, New_Inf_to_send}),
-			    {next_state, 'NORMAL STAGE', State};
+			    {next_state, 'NORMAL STAGE', New_State};
 			{logoff, Logoff_Msg} ->
-			    logoff(Logoff_Msg, State);
+			    logoff(Logoff_Msg, New_State);
 			Why ->
 			    io:format("kill"),
-			    {stop, Why, State}
+			    {stop, Why, New_State}
 		    end;
 		false ->
 		    case (catch Tries_left-1) of
@@ -230,25 +236,28 @@ init([]) ->
     Data=utf8:from_utf8(Data_utf8),
     ?DEBUG(debug, "DATA recived in NORMAL '~s'~n", [Data]),
     Message=string:tokens(Data, " "),
-    case Message of
-	[[Header|Command_name]|Tail] ->
-	    H = [Header],Cmd=Command_name,
-	    Res = (catch handle_command(H, Cmd, Tail, Data, State)),
-	    case Res of
-		ok ->
-		    everything_is_fine;
-		Error ->
-		    Msg_to_send= lists:flatten(io_lib:format("Error: ~w",[Error])),
-		    eadc_utils:error_to_pid(self(), Msg_to_send)
-	    end,
-	    ?DEBUG(debug, "command result ~w\n", [Res]);    
-	[] ->
-	    keep_alive;
-	Other ->
-	    ?DEBUG(error, "Unknown message '~w'", [Other]),
-	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\serror\n")
-    end,
-    {next_state, 'NORMAL STAGE', State};
+    New_State = case Message of
+		    [[Header|Command_name]|Tail] ->
+			H = [Header],Cmd=Command_name,
+			Res = (catch handle_command(H, Cmd, Tail, Data, State)),
+			?DEBUG(debug, "command result ~w\n", [Res]),
+			case Res of
+			    {ok, New_State_} when is_record(New_State_,state) ->
+				New_State_;
+			    Error ->
+				Msg_to_send= lists:flatten(io_lib:format("Error: ~w",[Error])),
+				eadc_utils:error_to_pid(self(), Msg_to_send),
+				State
+			end;
+		    [] ->
+			keep_alive,
+			State;
+		    Other ->
+			?DEBUG(error, "Unknown message '~w'", [Other]),
+			ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\serror\n"),
+			State
+		end,
+    {next_state, 'NORMAL STAGE', New_State};
 
 'NORMAL STAGE'({send_to_socket, Data}, State) ->
     send_to_socket(Data, State),
@@ -354,8 +363,9 @@ terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
 	_ -> ok
     end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
-    String_to_send = "IQUI "++ eadc_utils:sid_to_s(Sid) ++"\n",
-    eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, String_to_send},{state, State}]),
+    S_to_send="IQUI "++eadc_utils:sid_to_s(Sid),
+    Args=eadc_plugin:hook(user_quit, [{sid, Sid}, {msg, S_to_send},{state, State}]),
+    String_to_send=eadc_utils:get_val(msg, Args),
     lists:foreach(fun(Pid) ->
 			  case Pid of
 			      PID when is_pid(PID) ->
@@ -415,8 +425,8 @@ handle_command(H, Cmd, Tail, Data, State) ->
 		{all_pids(), 
 		 [{par, Par}, {my_sid, MySid}]}
 	end,
-    {New_Pids, New_Data} = client_command(H, Cmd, [{data, Data}|Args], Pids, State),
-    eadc_utils:send_to_pids(New_Pids, utf8:to_utf8(New_Data)).
+    {New_Pids, New_Data, New_State} = client_command(H, Cmd, [{data, Data}|Args], Pids, State),
+    {eadc_utils:send_to_pids(New_Pids, utf8:to_utf8(New_Data)), New_State}.
 
 client_command(Header, Command, Args, Pids, State) ->
     Data=get_val(data, Args),
@@ -451,7 +461,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		client_write(Client#client{inf=New_Inf_full}),
 		New_Inf_to_send=inf_update(lists:sublist(New_Inf_full, 9), Inf_update),
 		%% no any plugin
-		[{pids, Pids}, {data, New_Inf_to_send}];
+		[{pids, Pids}, {data, New_Inf_to_send}, {state, State}];
 	    {"D","CTM"} ->
 		{pid,[Pid]} = {pid,Pids},
 		case is_pid(Pid) of
@@ -463,13 +473,15 @@ client_command(Header, Command, Args, Pids, State) ->
 					       {data,Data},{pids,Pids},{state, State}]);
 		    false ->
 			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
-			[{pids,[]}, {data,Data}] %% в том смысле что никому ничего мы теперь не пошлём
+			[{pids,[]}, {data,Data}, {state, State}] %% в том смысле что никому ничего мы теперь не пошлём
 		end;
 	    {_place, _holder} ->
-		[{pids,Pids}, {data,Data}]
+		[{pids,Pids}, {data,Data}, {state, State}]
 	end,
     %%?DEBUG(debug, "client_command: ~w", [{Header, Command, Args, Pids, State}]),
-    {eadc_utils:get_val(pids, Res),eadc_utils:get_val(data, Res)}.
+    {eadc_utils:get_val(pids, Res),
+     eadc_utils:get_val(data, Res),
+     eadc_utils:get_val(state, Res)}.
 
 
 %%%------------------------------------------------------------------------
@@ -573,12 +585,11 @@ user_login(Sid,Nick,Cid,Args) ->
 				  eadc_utils:send_to_pid(My_Pid, CInf)
 			  end, client_all()),
 	    client_write(Client),
-	    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send),
-	    Client;
+	    eadc_utils:send_to_pids([self()| Pids_to_inform], Data_to_send);
 	false -> %% logoff
-	    Error=Client,
-	    {logoff, Error}
-    end.
+	    logoff
+    end,
+    Hooked_Args.
 
 need_authority(Nick, Cid) ->
     MatchHead = #account{cid='$1', nick='$2', _='_'},
