@@ -74,16 +74,18 @@ init([]) ->
     %% Allow to receive async messages
     {next_state, 'WAIT_FOR_SOCKET', State}.
 
-'PROTOCOL STAGE'({data, Data}, #state{socket=Socket} = State) ->
+'PROTOCOL STAGE'({data, Data}, #state{socket=Socket, other=Other} = State) ->
     ?DEBUG(debug, "Data recived in PROTOCOL '~s'~n", [Data]),
     case Data of
-	[ $H,$S,$U,$P,$\  | _] ->
+	[ $H,$S,$U,$P,$\  | SupLine] ->
+	    SupList=string:tokens(SupLine, " "),Sup=sup_update([], SupList),
+	    New_Other=eadc_utils:set_val(sup, Sup, Other),
 	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
 	    Sid = get_unical_SID(),
 	    ok = gen_tcp:send(Socket, ["ISID ",eadc_utils:sid_to_s(Sid), "\n"]),
-	    {next_state, 'IDENTIFY STAGE', State#state{sid=Sid}, ?TIMEOUT};
+	    {next_state, 'IDENTIFY STAGE', State#state{sid=Sid, other=New_Other}, ?TIMEOUT};
 	_ ->
-	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
+	    ok = gen_tcp:send(Socket, "ISTA 140 Protocol\\serror\n"),
 	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
     end;
 
@@ -184,6 +186,7 @@ init([]) ->
 		true ->
 		    New_Args=Func(), %% user_login
 		    {client, Client}={client, eadc_utils:get_val(client, New_Args)},
+
 		    {state,New_State}={state,eadc_utils:get_val(state, New_Args)},
 		    case Client of
 			Client when is_record(Client, client) ->
@@ -475,6 +478,12 @@ client_command(Header, Command, Args, Pids, State) ->
 			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
 			[{pids,[]}, {data,Data}, {state, State}] %% в том смысле что никому ничего мы теперь не пошлём
 		end;
+	    {"H", "SUP"} ->
+		Sup_Update=get_val(par, Args),
+		Sup=Client#client.sup,
+		New_Sup=sup_update(Sup, Sup_Update),
+		client_write(Client#client{sup=New_Sup}),
+		[{pids,Pids}, {data,Data}, {state, State}];
 	    {_place, _holder} ->
 		[{pids,Pids}, {data,Data}, {state, State}]
 	end,
@@ -577,7 +586,11 @@ user_login(Sid,Nick,Cid,Args) ->
     Hooked_Args=eadc_plugin:hook(user_login, [{client, Pre_Client}|Args]),
     {pids, Pids_to_inform}={pids,get_val(pids, Hooked_Args)},
     {data, Data_to_send}={data,get_val(data, Hooked_Args)},
-    {client, Client}={client,get_val(client, Hooked_Args)},
+    {client, Hooked_Client}={client,get_val(client, Hooked_Args)},
+    {state, State} = {state, get_val(state, Hooked_Args)},
+    Sup=get_val(sup, State#state.other),
+    Client=Hooked_Client#client{sup=Sup},
+    New_Args=eadc_utils:set_val(client, Client, Hooked_Args),
     
     case is_record(Client, client) of
 	true ->
@@ -589,7 +602,19 @@ user_login(Sid,Nick,Cid,Args) ->
 	false -> %% logoff
 	    logoff
     end,
-    Hooked_Args.
+    New_Args.
+
+sup_update(Sup, Sup_Update) when not is_list(Sup)->
+    sup_update(["BASE"], Sup_Update);
+sup_update(Sup, [[$A,$D| SupName]|Tail]) ->
+    NotNew=fun(CSup) -> (CSup /= SupName) end,
+    sup_update([SupName|lists:filter(NotNew, Sup)], Tail);
+sup_update(Sup, [[$R,$M| SupName]|Tail]) when is_list(Sup) ->
+    sup_update(lists:delete(SupName, Sup), Tail);
+sup_update(Sup, [[_HZ_]|Tail]) ->
+    sup_update(Sup, Tail);
+sup_update(Sup, []) ->
+    Sup.
 
 need_authority(Nick, Cid) ->
     MatchHead = #account{cid='$1', nick='$2', _='_'},

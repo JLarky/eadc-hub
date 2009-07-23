@@ -32,6 +32,7 @@
 	  nick,
 	  login,
 	  inf, %% INF string to send to other clients
+	  sup=[], %% SUP list of supported features
 	  addr %% client address
 	  }).
 
