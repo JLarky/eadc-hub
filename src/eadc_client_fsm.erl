@@ -19,11 +19,13 @@
 	]).
 
 %% HELPING FUNCTIONS
--export([all_pids/0,inf_update/2]).
+-export([all_pids/0,inf_update/2,sup_update/2]).
+-export([get_pid_by_sid/1, get_unical_cid/0,get_unical_SID/0]).
 
-%% DEBUG
--export([test/1, get_pid_by_sid/1, get_unical_cid/0,get_unical_SID/0]).
+%% SOCKET
+-export([send/2]).
 
+%% CLIENT
 -export([client_get/1, client_write/1, client_delete/1,client_all/0]).
 
 -define(TIMEOUT, 120000).
@@ -80,17 +82,17 @@ init([]) ->
 	[ $H,$S,$U,$P,$\  | SupLine] ->
 	    SupList=string:tokens(SupLine, " "),Sup=sup_update([], SupList),
 	    New_Other=eadc_utils:set_val(sup, Sup, Other),
-	    ok = gen_tcp:send(Socket, "ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
+	    ok = send("ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD", Socket),
 	    Sid = get_unical_SID(),
-	    ok = gen_tcp:send(Socket, ["ISID ",eadc_utils:sid_to_s(Sid), "\n"]),
+	    ok = send(["ISID ",eadc_utils:sid_to_s(Sid)], Socket),
 	    {next_state, 'IDENTIFY STAGE', State#state{sid=Sid, other=New_Other}, ?TIMEOUT};
 	_ ->
-	    ok = gen_tcp:send(Socket, "ISTA 140 Protocol\\serror\n"),
+	    ok = send("ISTA 140 Protocol\\serror", Socket),
 	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
     end;
 
-'PROTOCOL STAGE'(timeout,  #state{socket=Socket} = State) ->
-    ok = gen_tcp:send(Socket, "Protocol Error: connection timed out\n"),
+'PROTOCOL STAGE'(timeout, State) ->
+    ok = send("ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout", State),
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
@@ -99,10 +101,10 @@ init([]) ->
     List = eadc_utils:s2a(Data),
     case List of
 	["BINF", SID | _] ->
-	    gen_tcp:send(Socket, "IINF CT32 VEEADC NIHub DE \n"),
+	    send("IINF CT32 VEEADC NIHub DE", Socket),
 	    case SID == eadc_utils:sid_to_s(Sid) of
 		false ->
-		    gen_tcp:send(Socket,["ISTA 240 ",eadc_utils:quote("SID is not correct"),"\n"]),
+		    send(["ISTA 240 ",eadc_utils:quote("SID is not correct")], Socket),
 		    {stop, normal, State};	    
 		true ->
 		    ?DEBUG(debug, "New client with BINF= '~s'~n", [Data]),
@@ -160,7 +162,7 @@ init([]) ->
 			    
 	    end;
 	_ ->
-	    ok = gen_tcp:send(Socket, "ISTA 240 Protocol error\n"),
+	    ok = send("ISTA 240 Protocol\\serror", Socket),
 	    {next_state, 'IDENTIFY STAGE', State, ?TIMEOUT}
     end;
 
@@ -168,8 +170,8 @@ init([]) ->
     send_to_socket(Data, State),
     {next_state, 'IDENTIFY STAGE', State};
 
-'IDENTIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
-    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout\n"),
+'IDENTIFY STAGE'(timeout, State) ->
+    ok = send("ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout", State),
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
@@ -229,8 +231,8 @@ init([]) ->
     send_to_socket(Data, State),
     {next_state, 'VERIFY STAGE', State};
 
-'VERIFY STAGE'(timeout,  #state{socket=Socket} = State) ->
-    ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout\n"),
+'VERIFY STAGE'(timeout, State) ->
+    ok = send("ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout", State),
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
@@ -257,7 +259,7 @@ init([]) ->
 			State;
 		    Other ->
 			?DEBUG(error, "Unknown message '~w'", [Other]),
-			ok = gen_tcp:send(Socket, "ISTA 240 Protocol\\serror\n"),
+			ok = send("ISTA 240 Protocol\\serror", Socket),
 			State
 		end,
     {next_state, 'NORMAL STAGE', New_State};
@@ -359,10 +361,10 @@ handle_info(Info, StateName, StateData) ->
 %% Returns: any
 %% @private
 %%-------------------------------------------------------------------------
-terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
+terminate(Reason, _StateName, #state{socket=Socket,sid=Sid}=State) ->
     case Reason of
 	String when is_list(String) ->
-	    (catch gen_tcp:send(Socket, ["ISTA 123 ",eadc_utils:quote(Reason),"\n"]));
+	    (catch send(["ISTA 123 ",eadc_utils:quote(Reason)], State));
 	_ -> ok
     end,
     ?DEBUG(debug, "TERMINATE ~w", [Sid]),
@@ -378,7 +380,7 @@ terminate(Reason, _StateName, #state{socket=Socket, sid=Sid}=State) ->
 			  end
 		  end, all_pids()),
     (catch client_delete(Sid)),
-    (catch gen_tcp:send(Socket, String_to_send)),
+    (catch send(String_to_send, Socket)),
     (catch gen_tcp:close(Socket)),
     ok.
 
@@ -556,12 +558,6 @@ all_pids() ->
 	_Error -> []
     end.
 
-test(String) ->
-    String.
-    %%set_client_login(String).
-    %%[Pid | _] =all_pids(),
-    %%gen_fsm:send_event(Pid, {send_to_socket, String}).
-
 
 inf_update_cur(Update, [], Acc) ->
     [Update|Acc];            %% adds new field
@@ -669,21 +665,26 @@ client_all() ->
 	    {undefined, ?FILE, ?LINE}
     end.
 
-send_to_socket(Data, #state{socket=Socket, sid=Sid}) ->
+send(Data, State) ->
+    send_to_socket(Data, State).
+
+send_to_socket(Data, #state{socket=Socket}=State) when is_record(State, state) ->
+    send_to_socket(Data, Socket);
+send_to_socket(Data, Socket) when is_port(Socket) ->
     ?DEBUG(debug, "send_to_socket event '~w'~n", [Data]),
     case (catch gen_tcp:send(Socket, [Data, "\n"])) of
 	ok ->
 	    ok;
 	{error,einval} ->
-	    ?DEBUG(error, "~w has error '{error,einval}' when sending '~p'\n", [Sid,Data]),
+	    ?DEBUG(error, "~w has error '{error,einval}' when sending '~p'\n", [self(),Data]),
 	    case (catch gen_tcp:send(Socket, [utf8:to_utf8(Data), "\n"])) of
 		ok ->
 		    ok;
 		Error ->
-		    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
+		    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [self(), Error,Data])
 	    end;
 	Error ->
-	    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [Sid, Error,Data])
+	    ?DEBUG(error, "~w has error '~w' when sending '~p'\n", [self(), Error,Data])
     end.
 
 logoff(Msg, State) ->
