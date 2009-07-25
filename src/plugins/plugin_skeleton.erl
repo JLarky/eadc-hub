@@ -31,7 +31,7 @@ chat_msg(Args) ->
     eadc_utils:info_to_pid(self(), "I see your message! You just wrote: "
 			   ++eadc_utils:unquote(Msg)), %% unquote becose info_to_pid do quote
 
-    %% if we want see Erlang term in chat we have do like that
+    %% if we want see Erlang term in chat we have to do like that
     Out=[1,2,3,{1,2,3}], 
     Test=lists:flatten(io_lib:format("~w", [Out])),
     eadc_utils:error_to_pid(self(), Test),

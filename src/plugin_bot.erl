@@ -23,14 +23,6 @@ terminate() ->
 init(Args) ->
     init().
 
-init_(Args) ->
-    Cid=eadc_client_fsm:get_unical_cid(),
-    Sid=eadc_client_fsm:get_unical_SID(),
-    Nick="test-room",
-    Inf="BINF "++eadc_utils:sid_to_s(Sid)++" CT5"++" ID"++Cid++" NI"++Nick++" DEтестовая\\sкомната",
-    eadc_client_fsm:client_write(#client{cid=Cid, sid=Sid, nick=Nick, inf=Inf, pid=undefined}),
-    Args.
-
 topic_to_pids(Pids) ->
     Topic=eadc_utils:get_option(mainchat, topic, "No topic set"),
     HubName=eadc_utils:get_option(hub, name, "EADC. ADC hub written in Erlang"),
