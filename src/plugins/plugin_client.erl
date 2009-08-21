@@ -4,6 +4,8 @@
 %%%
 %%% Created : Thu Jul 23 15:38:23 MSD 2009
 %%%-------------------------------------------------------------------
+
+%% DOESN'T WORK
 -module(plugin_client).
 -author('jlarky@gmail.com').
 
