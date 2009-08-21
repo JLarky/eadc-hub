@@ -24,7 +24,7 @@ terminate() ->
     ok.
 
 chat_msg(Args) ->
-    ?DEBUG(debug, "chat_msg: ~w~n", [Args]), %% it's appear in debug
+    ?DEBUG(debug, "chat_msg: ~w~n", [Args]), %% it appears in debug
     Msg=eadc_utils:get_val(msg, Args), %% extracting 'msg' param from 'Args'
 
     %% send message to sender

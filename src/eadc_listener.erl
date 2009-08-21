@@ -101,7 +101,7 @@ handle_info({inet_async, ListSock, Ref, {ok, CliSocket}},
 
         %% New client connected - spawn a new process using the simple_one_for_one
         %% supervisor.
-        {ok, Pid} = eadc_app:start_client(),
+        {ok, Pid} = Module:start_client(),
         gen_tcp:controlling_process(CliSocket, Pid),
         %% Instruct the new FSM that it owns the socket.
         Module:set_socket(Pid, CliSocket),

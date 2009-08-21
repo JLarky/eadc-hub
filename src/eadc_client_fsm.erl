@@ -3,7 +3,7 @@
 
 -behaviour(gen_fsm).
 
--export([start_link/0, set_socket/2]).
+-export([start_link/0, set_socket/2, start_client/0]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
@@ -41,6 +41,9 @@ start_link() ->
 set_socket(Pid, Socket) when is_pid(Pid), is_port(Socket) ->
     gen_fsm:send_event(Pid, {socket_ready, Socket}).
 
+start_client() ->
+    supervisor:start_child(eadc_client_sup, []).
+
 %%%------------------------------------------------------------------------
 %%% Callback functions from gen_server
 %%%------------------------------------------------------------------------
@@ -70,6 +73,9 @@ init([]) ->
 
     inet:setopts(Socket, [{active, once}, {packet, line}]),
     {ok, {IP, _Port}} = inet:peername(Socket),
+    %% hook
+    Args=[{state, State}, {ip,IP}, {socket, Socket}],
+    _Hooked_Args=eadc_plugin:hook(user_connected, [Args]),
     {next_state, 'PROTOCOL STAGE', State#state{socket=Socket, addr=IP}, ?TIMEOUT};
 'WAIT_FOR_SOCKET'(Other, State) ->
     error_logger:error_msg("State: 'WAIT_FOR_SOCKET'. Unexpected message: ~p\n", [Other]),
@@ -85,10 +91,13 @@ init([]) ->
 	    ok = send("ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD", Socket),
 	    Sid = get_unical_SID(),
 	    ok = send(["ISID ",eadc_utils:sid_to_s(Sid)], Socket),
-	    {next_state, 'IDENTIFY STAGE', State#state{sid=Sid, other=New_Other}, ?TIMEOUT};
+	    New_State=State#state{sid=Sid, other=New_Other},
+	    Args=[{state, New_State}, {data,Data}, {sup, Sup}],
+	    _Hooked_Args=eadc_plugin:hook(user_identify, [Args]),
+	    {next_state, 'IDENTIFY STAGE', New_State, ?TIMEOUT};
 	_ ->
 	    ok = send("ISTA 140 Protocol\\serror", Socket),
-	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
+ 	    {next_state, 'PROTOCOL STAGE', State, ?TIMEOUT}
     end;
 
 'PROTOCOL STAGE'(timeout, State) ->

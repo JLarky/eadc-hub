@@ -20,7 +20,7 @@ init() ->
 terminate() ->
      {error, "This plugin can't be stopped"}.
 
-init(Args) ->
+init(_Args) ->
     init().
 
 topic_to_pids(Pids) ->
@@ -85,7 +85,7 @@ user_quit(Args) ->
     Banned=eadc_utils:get_val(banned, Other),
     case Banned of
 	true -> %% don't send QUI message for banned users, because they really didn't login
-	    New_Args=eadc_utils:set_val(msg, "", Args);
+	    _New_Args=eadc_utils:set_val(msg, "", Args);
 	_ ->
 	    Args
     end.
@@ -112,7 +112,7 @@ chat_msg(Args) ->
 	    lists:keyreplace(data, 1, Args, {data, lists:sublist(Data, 512)})
     end.
 
-do_command([Command|Args], State, Client) ->
+do_command([Command|Args], _State, Client) ->
     case Command of
 	"help" ->
 	    Hlp="All hub commands:
@@ -168,7 +168,7 @@ Roles:
 		'NO KEY' ->
 		    fine;
 		UserLogin ->
-		    throw({error,"You are allredy registered as '"++UserName++"'"})
+		    throw({error,"You are allredy registered as '"++UserLogin++"'"})
 	    end,
 	    case eadc_user:access('self registration') or (Roles==[root]) of
 		true ->
@@ -208,7 +208,7 @@ Roles:
 	    case eadc_user:access('change topic') of
 		true ->
 		    Topic=string:join(Args, " "),
-		    Ok=eadc_utils:set_option(mainchat, topic, Topic),
+		    _Ok=eadc_utils:set_option(mainchat, topic, Topic),
 		    AllPids=eadc_client_fsm:all_pids(),
 		    topic_to_pids(AllPids);		    
 		false ->
@@ -219,7 +219,7 @@ Roles:
 		true ->
 		    [Key | Rest] = Args,
 		    Val=string:join(Rest, " "),
-		    Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val),
+		    _Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val),
 		    eadc_utils:info_to_pid(self(), "OK");
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
@@ -239,7 +239,7 @@ Roles:
                 true ->
                     [Key | Rest] = Args,
                     Val=string:join(Rest, " "),
-                    Ok=eadc_utils:set_option(files, list_to_atom(Key), Val),
+                    _Ok=eadc_utils:set_option(files, list_to_atom(Key), Val),
 		    eadc_utils:info_to_pid(self(), "OK");
                 false ->
                     eadc_utils:info_to_pid(self(), "You don't have permission.")
@@ -361,12 +361,6 @@ Roles:
 	    eadc_utils:info_to_pid(self(), "Unknown command '"++Command++"'")
     end.
 
-priv_msg(Args) ->
-    {list, [_EMSG, From_Sid, _To_Sid, Mesg, _PMFJKJ]}=eadc_utils:convert({string, eadc_utils:get_val(data, Args)}),
-
-    Pid=list_to_pid("<0.119.0>"),
-    A=eadc_utils:set_val(pids, eadc_client_fsm:all_pids(), Args),
-    eadc_utils:set_val(data, "EMSG "++From_Sid++" KVSP "++Mesg++" PMKVSP", A).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%

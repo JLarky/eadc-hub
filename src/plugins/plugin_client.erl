@@ -13,7 +13,8 @@
 -export([init/0,terminate/0]). %% required
 
 -export([init/1,
-	 chat_msg/1
+	 chat_msg/1,
+	 master_command/1
 	]). %% some hook that you want to catch
 
 init(Args) ->
@@ -23,7 +24,7 @@ init(Args) ->
 %% @spec init() -> ok | {error, String}
 %% @doc do init stuff and returns ok or {error, Message} if something's going wrong
 init() ->
-    eadc_plugin:bot_add(plugin_client, "Test", "dfvdfv", 5),
+    eadc_plugin:bot_add(plugin_client, "Test", "Test bot", 5),
     ok.
 
 %% @spec terminate() -> ok | {error, String}
@@ -33,5 +34,22 @@ terminate() ->
     ok.
 
 chat_msg(Args) ->
-    %%io:format("~p\n", [Args]),
+    Msg=eadc_utils:get_val(msg, Args),
+    case Msg of
+	".test" ->
+	    A=Msg,
+	    eadc_master ! {self(), {command, p_client_start, []}},
+	    io:format("~p\n", [A]);
+	_ -> ok
+    end,
+    
+    Args.
+
+master_command(Args) ->
+    case eadc_utils:get_val(cmd, Args) of
+	p_client_start ->
+	    p_client_main:start_link();
+	_ ->
+	    ok
+    end,
     Args.

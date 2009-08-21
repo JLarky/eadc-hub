@@ -7,9 +7,6 @@
 -behaviour(application).
 -behaviour(supervisor).
 
-%% Internal API
--export([start_client/0]).
-
 %% Application and Supervisor callbacks
 -export([start/2, stop/1, init/1]).
 
@@ -21,12 +18,6 @@
 -define(MAX_RESTART,    5).
 -define(MAX_TIME,      60).
 -define(DEF_PORT,    4111).
-
-%% @doc A startup function for spawning new client connection handling FSM.
-%% To be called by the TCP listener process.
-%% @end
-start_client() ->
-    supervisor:start_child(eadc_client_sup, []).
 
 %%----------------------------------------------------------------------
 %% Application behaviour callbacks
