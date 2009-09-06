@@ -28,7 +28,7 @@
 %% CLIENT
 -export([client_get/1, client_write/1, client_delete/1,client_all/0]).
 
--define(TIMEOUT, 120000).
+-define(TIMEOUT, 30000).
 -include("eadc.hrl").
 
 %%%------------------------------------------------------------------------
@@ -101,7 +101,18 @@ init([]) ->
     end;
 
 'PROTOCOL STAGE'(timeout, State) ->
-    ok = send("ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout", State),
+    Not_set=make_ref(),
+    Host=eadc_utils:get_option(hub, host, Not_set),
+    Port=eadc_utils:get_option(hub, port, Not_set),
+    if %% most likely that timeout is coused by connecting in nmdc mode
+	((Host /= Not_set) and (Port /= Not_set)) ->
+	    Addr=lists:concat(["adc://", Host, ":", Port]),
+	    Msg=["<ADC> This hub doesn't work with NMDC clients, redirect to ADC(",
+		 Addr,").|$ForceMove ",Addr,"|"],
+	    ok = send(Msg, State);
+       true ->
+	    ok = send("ISTA 240 Protocol\\sError:\\sconnection\\stimed\\sout", State)
+    end,
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
@@ -370,6 +381,7 @@ handle_info(Info, StateName, StateData) ->
 %% Returns: any
 %% @private
 %%-------------------------------------------------------------------------
+terminate(_,_,#state{sid=Sid}) when not is_integer(Sid) -> ok;
 terminate(Reason, _StateName, #state{socket=Socket,sid=Sid}=State) ->
     case Reason of
 	String when is_list(String) ->
@@ -383,7 +395,7 @@ terminate(Reason, _StateName, #state{socket=Socket,sid=Sid}=State) ->
     lists:foreach(fun(Pid) ->
 			  case Pid of
 			      PID when is_pid(PID) ->
-				  gen_fsm:send_event(Pid, {send_to_socket, String_to_send});
+				     gen_fsm:send_event(Pid, {send_to_socket, String_to_send});
 			      _not_pid ->
 				  ok
 			  end

@@ -228,9 +228,11 @@ Roles:
 	    case eadc_user:access('get config') of
 		true ->
 		    AllOptions=eadc_utils:get_options({option, {hub, '_'}, '_'}),
-		    Options=lists:map(fun(E) -> {hub, Key}=E#option.id, Val=E#option.val, atom_to_list(Key)++" => '"++Val++"'\n" end, AllOptions),
+		    Options=lists:map(fun(E) -> {hub, Key}=E#option.id,Val=E#option.val, 
+						lists:concat([Key," => '",Val,"'\n"]) end,
+				      AllOptions),
 		    Out=string:join(Options, " "),
-		    eadc_utils:info_to_pid(self(), "Config list:\n"++Out);
+		    eadc_utils:info_to_pid(self(), "Config list:\n "++Out);
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
