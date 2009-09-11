@@ -12,6 +12,9 @@
 
 -export([init/0,terminate/0]).
 
+% export
+-export([get_fields/2]).
+
 init() ->
     eadc_app:start_table(ban, [{attributes,
 				record_info(fields, ban)},
@@ -143,20 +146,28 @@ Roles:
  !addtorole <role> <permission> - addes permission to role
  !delfromrole <role> <permission> - deletes permission from role
  !addrole <role> <login> - addes role to login
- !delrole <role> <login> - deletes role from login
-",
+ !delrole <role> <login> - deletes role from login\n",
 	    eadc_utils:info_to_pid(self(), Hlp);
 	"regnewuser" ->
 	    case eadc_user:access('reg user') of
 		true ->
-		    [UserName,Pass|_]=Args,
-		    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,pass=Pass}),
-		    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p", [Ok])));
+		    case get_fields(Args, 2) of
+			[UserName|Pass] ->
+			    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,
+								 pass=Pass}),
+			    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p",
+										       [Ok])));
+			_ -> throw({error, "usage: !regnewuser <name> <pass>"})
+		    end;
 		false ->
 		    throw({error, "You don't have permission."})
 	    end;
 	"regme" ->
-	    [Pass|_]=Args,UserName=Client#client.nick,
+	    case get_fields(Args, 1) of
+		[Pass] -> ok;
+		Pass   -> throw({error, "usage: !regme <pass>"})
+	    end,
+	    UserName=Client#client.nick,
 	    case mnesia:table_info(account, size) of
 		0 -> %% first user
 		    eadc_utils:info_to_pid(self(), "Register superuser."),
@@ -181,17 +192,25 @@ Roles:
 	"drop" ->
 	    case eadc_user:access('drop any') of
 		true ->
-		    [UserName, Reason|_]=Args,OPName=Client#client.nick,
-		    drop(UserName, OPName, Reason);
+		    case get_fields(Args, 2) of
+			[UserName, Reason] ->
+			    OPName=Client#client.nick,
+			    drop(UserName, OPName, Reason);
+			_ -> throw({error, "usage !drop <name> <reason>"})
+		    end;
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
 	"kick" ->
 	    case eadc_user:access('kick any') of
                 true ->
-		    [UserName, Reason|_]=Args,OPName=Client#client.nick,
-		    ban(UserName, OPName, Reason),
-		    drop(UserName, OPName, Reason);
+		    case get_fields(Args, 2) of
+                        [UserName, Reason] ->
+			    OPName=Client#client.nick,
+			    ban(UserName, OPName, Reason),
+			    drop(UserName, OPName, Reason);
+			_ -> throw({error, "usage !kick <name> <reason>"})
+                    end;
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
@@ -217,10 +236,13 @@ Roles:
 	"setconfig" ->
 	    case eadc_user:access('set config') of
 		true ->
-		    [Key | Rest] = Args,
-		    Val=string:join(Rest, " "),
-		    _Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val),
-		    eadc_utils:info_to_pid(self(), "OK");
+                    case get_fields(Args, 2) of
+			[Key | Rest] ->
+			    Val=string:join(Rest, " "),
+			    _Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val),
+			    eadc_utils:info_to_pid(self(), "OK");
+			_ -> throw({error, "usage: !setconfig <key> <val>"})
+		    end;
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
@@ -239,10 +261,13 @@ Roles:
         "setfile" ->
             case eadc_user:access('set files') of
                 true ->
-                    [Key | Rest] = Args,
-                    Val=string:join(Rest, " "),
-                    _Ok=eadc_utils:set_option(files, list_to_atom(Key), Val),
-		    eadc_utils:info_to_pid(self(), "OK");
+                    case get_fields(Args, 2) of
+			[Key | Rest] ->
+			    Val=string:join(Rest, " "),
+			    _Ok=eadc_utils:set_option(files, list_to_atom(Key), Val),
+			    eadc_utils:info_to_pid(self(), "OK");
+			_ -> throw({error, "usage: !setfile <key> <val>"})
+		    end;
                 false ->
                     eadc_utils:info_to_pid(self(), "You don't have permission.")
             end;
@@ -252,6 +277,10 @@ Roles:
 		    ok;
 		false ->
 		    throw({error,"You don't have permission."})
+	    end,
+	    case get_fields(Args, 3) of
+		[_,_,_] -> ok;
+		_ -> throw({error, "usage: !plugin on/off <name>"})
 	    end,
 	    {MName,F,M}=case Args of
 			    ["on", Name|_] ->
@@ -316,7 +345,10 @@ Roles:
                 true ->  ok;
                 false -> throw({error,"You don't have permission."})
             end,
-	    [Role|Perm]=Args,Permission=string:join(Perm, " "),
+	    [Role|Permission]= case get_fields(Args,2) of
+				   A=[_,_] -> A;
+				   _ -> throw({error, "Error: see help for usage"})
+			       end,
 	    case mnesia:dirty_read(permission, list_to_atom(Permission)) of
 		[Perms] ->
 		    Roles=Perms#permission.roles;
@@ -343,7 +375,10 @@ Roles:
                 true ->  ok;
                 false -> throw({error,"You don't have permission."})
             end,
-	    [Role|Log]=Args,Login=string:join(Log, " "),
+	    [Role|Login]=case get_fields(Args,2) of
+			     A=[_,_] -> A;
+			     _ -> throw({error, "Error: see help for usage"})
+			 end,
 	    Acc=eadc_utils:account_get(Login),
 	    Roles=case is_record(Acc,account) of
 		      true ->
@@ -395,3 +430,21 @@ ban(UserName, OPName, IP, Time, Reason) ->
 	     op=OPName, reason=Reason},
     ok=mnesia:dirty_write(Ban),
     eadc_utils:info_to_pid(self(), "User '"++UserName++"' banned").
+
+
+%% @spec get_field(Args::list(), Number_of_Fields::integer()) -> List | []
+%% @doc Takes List of N strings, and makes list of NoF while N >= NoF and returns []
+%% if N is not enough
+%% @end
+get_fields(Args, Number_of_Fields) when is_integer(Number_of_Fields) ->
+    get_fields(Args, Number_of_Fields, _Acc=[]).
+
+get_fields([], Number_of_Fields, _Acc) when Number_of_Fields > 0->
+    Number_of_Fields;
+get_fields([], Number_of_Fields, Acc) when Number_of_Fields == 0->
+    Acc;
+get_fields(Args, Number_of_Fields, Acc) when Number_of_Fields == 1-> 
+    Acc++[string:join(Args, " ")];
+get_fields([Head|Tail], Number_of_Fields, Acc) when Number_of_Fields > 1-> 
+    get_fields(Tail, Number_of_Fields-1, Acc++[Head]).
+
