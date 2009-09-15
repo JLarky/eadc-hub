@@ -630,6 +630,8 @@ sup_update(Sup, [[$R,$M| SupName]|Tail]) when is_list(Sup) ->
     sup_update(lists:delete(SupName, Sup), Tail);
 sup_update(Sup, [[_HZ_]|Tail]) ->
     sup_update(Sup, Tail);
+sup_update(Sup, [_HZ_]) ->
+    sup_update(Sup, []);
 sup_update(Sup, []) ->
     Sup.
 
