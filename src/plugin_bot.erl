@@ -99,7 +99,7 @@ chat_msg(Args) ->
     ?GET_VAL(data, Data),
     case Msg of 
 	[$!|Command] -> %% command
-	    {ok, Params}=regexp:split(Command, " "),
+	    Params=[binary_to_list(X) || X <- re:split(Command, " ")],
 	    State=eadc_utils:get_val(state, Args),
 	    Client=eadc_utils:get_val(client, Args),
 	    try do_command(Params, State, Client)
@@ -136,6 +136,7 @@ Admin's commands:
 Opertor's commands:
 !drop <username> <reason> - Drops user from hub
 !kick <username> <reason> - Bans user for 5 min and dropes from hub
+!ban <username> <minutes> <reason> - Bans user for the time
 
 Plugins:
  !plugin on <plugin> - turns on plugin and adds it to autostart
@@ -210,6 +211,23 @@ Roles:
 			    ban(UserName, OPName, Reason),
 			    drop(UserName, OPName, Reason);
 			_ -> throw({error, "usage !kick <name> <reason>"})
+                    end;
+		false ->
+		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+	    end;
+	"ban" ->
+	    case eadc_user:access('ban any') of
+                true ->
+		    case get_fields(Args, 3) of
+                        [UserName, Time_, Reason] ->
+			    OPName=Client#client.nick,
+			    case (catch list_to_integer(Time_)) of
+				Time when is_integer(Time) ->
+				    ban(UserName, OPName, Time, Reason);
+				_ ->
+				    throw({error, "usage !ban <name> <minutes> <reason>"})
+			    end;
+			_ -> throw({error, "usage !ban <name> <minutes> <reason>"})
                     end;
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
@@ -416,17 +434,19 @@ drop(UserName, OPName, Reason) ->
     end.
 
 ban(UserName, OPName, Reason) ->
+    ban(UserName, OPName, 5, Reason).
+
+ban(UserName, OPName, Time, Reason) ->
     Client=
 	case eadc_user:client_find(#client{nick=UserName, _='_'}) of
 	    [] -> throw({error, "User '"++UserName++"' not found."});
 	    [Client_]  -> Client_
 	end,
     IP=Client#client.addr,
-    Time=5*60,
     ban(UserName, OPName, IP, Time, Reason).
 
-ban(UserName, OPName, IP, Time, Reason) ->
-    Ban=#ban{nick=UserName, ip=IP, time=eadc_utils:get_unix_timestamp(now())+Time,
+ban(UserName, OPName, IP, Time, Reason) when is_integer(Time) ->
+    Ban=#ban{nick=UserName, ip=IP, time=eadc_utils:get_unix_timestamp(now())+Time*60,
 	     op=OPName, reason=Reason},
     ok=mnesia:dirty_write(Ban),
     eadc_utils:info_to_pid(self(), "User '"++UserName++"' banned").
