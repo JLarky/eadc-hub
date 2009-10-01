@@ -71,7 +71,8 @@ user_login(Args) ->
 
 motd() ->
     %% MOTD
-    Motd_def="Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang.",
+    Motd_def="Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang.
+Инструкции по установке http://github.com/JLarky/eadc-hub/blob/master/INSTALL.ru.txt",
     Motd_cfg=eadc_utils:get_option(files, motd, Motd_def),
     %% if Motd_conf is file use this file for MOTD
     MOTD=case (catch file:read_file(Motd_cfg)) of
