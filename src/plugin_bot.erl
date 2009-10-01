@@ -299,8 +299,8 @@ Roles:
 		false ->
 		    throw({error,"You don't have permission."})
 	    end,
-	    case get_fields(Args, 3) of
-		[_,_,_] -> ok;
+	    case get_fields(Args, 2) of
+		[_,_] -> ok;
 		_ -> throw({error, "usage: !plugin on/off <name>"})
 	    end,
 	    {MName,F,M}=case Args of

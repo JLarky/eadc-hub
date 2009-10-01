@@ -13,7 +13,7 @@
 
 -export([init/0,terminate/0]).
 
--export([ctm/1, chat_msg/1]). %% some hook that you want to catch
+-export([ctm/1, rcm/1, chat_msg/1]). %% some hook that you want to catch
 
 init() -> ok.
 terminate() -> ok.
@@ -21,44 +21,58 @@ terminate() -> ok.
 chat_msg(Args) ->
     ?GET_VAL(msg, Msg),
     case Msg of
-	[$., $i, $p | Tail] ->
-	    case Tail of
-		_ ->
-		    ?GET_VAL(state, State),
-		    ?GET_VAL(client, Client),
-		    #state{addr=Addr, sid=Sid}=State,Nick=Client#client.nick,
-		    Place=whois(Addr)
+	[$., $i, $p, $\  | Tail] ->
+	    try
+		[Client|_]=eadc_user:client_find(#client{nick=Tail,_='_'}),
+		Addr=Client#client.addr,
+		Place=whois(Addr),
+		Place_m =  case Place of
+			       inet -> "интернетах. Осторожно! трафик!";
+			       _    -> f("~w общаге.",[Place])
+			   end,
+		eadc_utils:info_to_pid(self(), f("Пользователь ~s находится в ~s",
+						 [Tail, Place_m]))
+	    catch error:Error ->
+		    eadc_utils:info_to_pid(self(), io_lib:format("Error: ~p\n",[Error]))
 	    end,
-	    Place_m =  case Place of
-			   inet -> "интернетах. Осторожно! трафик!";
-			   _    -> f("~w общаге.",[Place])
-		       end,
-	    eadc_utils:info_to_pid(self(), f("Пользователь ~s находится в ~s", [Nick, Place_m])),
-	    lists:keyreplace(pids, 1, Args, {pids, []});
+	    eadc_utils:set_val(pids, [], Args);
 	_ ->
 	    Args
     end.
+
+rcm(Args) ->
+    ctm(eadc_utils:set_val(rcm, true,Args)).
  
 ctm(Args) ->
-    [Pid]=eadc_utils:get_val(pids, Args),
-    %%State_f=eadc_utils:get_val(state, Args),
-    Client=eadc_utils:get_val(client, Args),
-    Nick_f=Client#client.nick,
+    try
+	[Pid]=eadc_utils:get_val(pids, Args),
+	%%State_f=eadc_utils:get_val(state, Args),
+	Client=eadc_utils:get_val(client, Args),
+	Nick_f=Client#client.nick,
+	
+	[Client_t]=eadc_user:client_find(#client{pid=Pid, _='_'}),
+	Nick_t=Client_t#client.nick,
+	_Direction=lists:concat([whois(Client_t#client.addr), "\\sи\\s", 
+				 whois(Client#client.addr)]),
+	%% send message to sender
 
-    [Client_t]=eadc_user:client_find(#client{pid=Pid, _='_'}),
-    Nick_t=Client_t#client.nick,
-    Direction=lists:concat([whois(Client_t#client.addr), "\\sи\\s", whois(Client#client.addr)]),
- 
-    %% send message to sender
-    %%eadc_utils:info_to_pid(self(), io_lib:format("~s только что попробовал приконнектиться к ~s. (~s)",[Nick_f, Nick_t,Direction])),
-    case {whois(Client_t#client.addr), whois(Client#client.addr)} of
-	{F, T} when (F == inet) or (T == inet) ->
-	    eadc_utils:info_to_pid(self(), "нифига не выйдет."),
-	    lists:keyreplace(pids, 1, Args, {pids, []});
-	_ ->
+	case {whois(Client#client.addr),whois(Client_t#client.addr)} of
+	    {F,G} when (F==inet)or(G==inet) ->
+		PA={F,G,eadc_utils:get_val(rcm, false, Args)},
+		?DEBUG(debug,"~p\n",[PA]),
+		Direction=lists:concat([whois(Client#client.addr), " и ",
+					whois(Client_t#client.addr)]),
+		eadc_utils:info_to_pid(self(), "Соединенние между "++Nick_f++" и "++Nick_t++
+				       " ("++Direction++") не состоится. Ваш Хаб."),
+		eadc_utils:set_val(pids, [], Args);
+	    _ ->
+		Args
+	end
+
+    catch error:Error ->
+	    eadc_utils:info_to_pid(self(), io_lib:format("Error: ~p\n",[Error])),
 	    Args
     end.
-    
 
  
     %% if we want see Erlang term in chat we have do like that

@@ -141,9 +141,9 @@ init([]) ->
 			Cid ->
 			    ok;
 			WRONGCID ->
-			    Msg=lists:concat(["User '", Nick, "' has wrong CID (",
+			    _Msg=lists:concat(["User '", Nick, "' has wrong CID (",
 					      WRONGCID,"). Be aware"]),
-			    eadc_utils:broadcast({info, Msg}),
+			    %%eadc_utils:broadcast({info, Msg}),
 			    eadc_utils:info_to_pid(self(),"Your CID isn't corresponding to PID. You are cheater.")
 		    end,
 		    
@@ -199,7 +199,7 @@ init([]) ->
 'VERIFY STAGE'({data, Data}, #state{addr=Addr, login=Login, random=Random, sid=_Sid, afterverify=Func, triesleft=Tries_left,other=Other}=State) ->
     case eadc_utils:s2a(Data) of
 	["HPAS", Pass] ->
-	    Cid=eadc_utils:get_val(cid, Other, ""),
+	    Cid=eadc_utils:get_val(cid, "", Other),
 	    CID=case (catch eadc_utils:base32_decode(Cid)) of
 		    L when is_list(L) -> L;
 		    _ -> ""
@@ -504,6 +504,19 @@ client_command(Header, Command, Args, Pids, State) ->
 			Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
 			?DEBUG(debug, "client_command: ctm hook ~w", [Pids]),
 			eadc_plugin:hook(ctm, [{pid,self()},{args,Args2},{sid,Sid},{client,Client},
+					       {data,Data},{pids,Pids},{state, State}]);
+		    false ->
+			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),
+			[{pids,[]}, {data,Data}, {state, State}] %% в том смысле что никому ничего мы теперь не пошлём
+		end;
+	    {"D","RCM"} ->
+		{pid,[Pid]} = {pid,Pids},
+		case is_pid(Pid) of
+		    true ->
+			Args2=get_val(par, Args),
+			Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
+			?DEBUG(debug, "client_command: rcm hook ~w", [Pids]),
+			eadc_plugin:hook(rcm, [{pid,self()},{args,Args2},{sid,Sid},{client,Client},
 					       {data,Data},{pids,Pids},{state, State}]);
 		    false ->
 			eadc_utils:error_to_pid(self(), "Произошла ошибка при поиске юзера с которого вы хотите скачать, такое ощущение что его нет."),

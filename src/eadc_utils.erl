@@ -279,10 +279,10 @@ get_required_field(Key, PInf) ->
     end.
 
 
-%% @spec get_val(atom(), TupleList1, Default::term()) -> Val::term() | Default::term()
+%% @spec get_val(atom(), Default::term(), TupleList1) -> Val::term() | Default::term()
 %% TupleList = [{Key::atom(), Val::term()}]
 %% @doc returns value with key Key or Default if not found
-get_val(Key, Args, Default) ->
+get_val(Key, Default, Args) ->
     case (catch lists:keysearch(Key, 1, Args)) of
 	{value,{Key, Val}} -> Val;
 	_ -> Default
@@ -292,7 +292,7 @@ get_val(Key, Args, Default) ->
 %% TupleList = [{Key::atom(), Val::term()}]
 %% @doc returns value with key Key or 'NO KEY'
 get_val(Key, Args) -> 
-    get_val(Key, Args, 'NO KEY').
+    get_val(Key, 'NO KEY', Args).
 
 %% @spec set_val(atom(), term(), TupleList1) -> TupleList2
 %% TupleLis1 = [{Key::atom(), OldVal::term()}]
