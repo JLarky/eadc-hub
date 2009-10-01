@@ -1,0 +1,8 @@
+1. Connect to adc://hostname:port (like adc://localhost:4111)
+2. In main chat type "!regme somepass"
+3. Reconnect with the password you wrote, now you have admin's privileges
+4. Type "!setconfig hostname www.punklan.net" set your hub's hostname (or ip)
+5. Type "!setconfig port 4111" set your hub's port (4111 is default value)
+6. Type "!setconfig name EADC", "!topic Some topic", "!setfile motd Some MOTD"
+7. Type "!addtorole anonymous self registration" to allow users to register themselves by "!regme" command
+
