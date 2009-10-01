@@ -125,6 +125,7 @@ User's commands:
  !userlist - shows all users with hidden passwords
 
 Admin's commands:
+ !regnewuser <username> <pass> - register user with password <pass>
  !regclass <username> <class> - changes user's class to <class>
  !userlist - shows all users with their passwords
  !topic <topic> - sets hub's topic
@@ -153,7 +154,8 @@ Roles:
 	    case eadc_user:access('reg user') of
 		true ->
 		    case get_fields(Args, 2) of
-			[UserName|Pass] ->
+			[UserName|Pass_] ->
+			    Pass=string:join(Pass_, " "),
 			    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,
 								 pass=Pass}),
 			    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p",

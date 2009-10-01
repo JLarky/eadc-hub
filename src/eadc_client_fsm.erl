@@ -116,7 +116,7 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
-'IDENTIFY STAGE'({data, Data}, #state{socket=Socket, addr=Addr, sid=Sid}=State) ->
+'IDENTIFY STAGE'({data, Data}, #state{socket=Socket, addr=Addr, sid=Sid,other=Other}=State) ->
     ?DEBUG(debug, "String recived in IDENTIFY '~s'~n", [Data]),
     List = eadc_utils:s2a(Data),
     case List of
@@ -165,7 +165,8 @@ init([]) ->
 			true ->
 			    Random=tiger:hash(eadc_utils:random_string(24)),
 			    eadc_utils:send_to_pid(self(), {args, ["IGPA", eadc_utils:base32_encode(Random)]}),
-			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end}, ?TIMEOUT};
+			    New_Other=eadc_utils:set_val(cid, Cid, Other),
+			    {next_state, 'VERIFY STAGE', New_State#state{random=Random, triesleft=3,afterverify=fun() -> user_login(Sid,Nick,Cid,Args) end, other=New_Other}, ?TIMEOUT};
 			false ->
 			    New_Args=user_login(Sid,Nick,Cid,Args), %% user_login
 			    {client, Client}={client, eadc_utils:get_val(client, New_Args)},
@@ -195,17 +196,24 @@ init([]) ->
     error_logger:info_msg("Client '~w' timed out\n", [self()]),
     {stop, normal, State}.
 
-'VERIFY STAGE'({data, Data}, #state{addr=Addr, login=Login, random=Random, sid=_Sid, afterverify=Func, triesleft=Tries_left}=State) ->
+'VERIFY STAGE'({data, Data}, #state{addr=Addr, login=Login, random=Random, sid=_Sid, afterverify=Func, triesleft=Tries_left,other=Other}=State) ->
     case eadc_utils:s2a(Data) of
 	["HPAS", Pass] ->
+	    Cid=eadc_utils:get_val(cid, Other, ""),
+	    CID=case (catch eadc_utils:base32_decode(Cid)) of
+		    L when is_list(L) -> L;
+		    _ -> ""
+		end,
 	    Account=eadc_utils:account_get(Login),
 	    User_Pass = Account#account.pass,
-	    A=User_Pass++Random,
-	    B=tiger:hash(A),
-	    C=eadc_utils:base32_encode(B),
-	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", [Login,Addr,{Pass,C}]),
-	    case C==Pass of
-		true ->
+	    N_P=User_Pass++Random,        %% 0.7
+	    C_N_P=CID++User_Pass++Random, %% draft
+	    H_N_P=(catch eadc_utils:base32_encode(tiger:hash(N_P))),
+	    H_C_N_P=(catch eadc_utils:base32_encode(tiger:hash(C_N_P))),
+	    ?DEBUG(debug, "DATA recived in VERIFY pass for ~s(~p) '~p'~n", 
+		   [Login,Addr,{Pass,H_N_P,H_C_N_P}]),
+	    case Pass of
+		P when (P==H_N_P) or (P==H_C_N_P) ->
 		    New_Args=Func(), %% user_login
 		    {client, Client}={client, eadc_utils:get_val(client, New_Args)},
 
@@ -229,7 +237,7 @@ init([]) ->
 			    io:format("kill"),
 			    {stop, Why, New_State}
 		    end;
-		false ->
+		_ ->
 		    case (catch Tries_left-1) of
 			I when is_integer(I) and (I > 0) ->
 			    timer:sleep(1000),

@@ -6,7 +6,7 @@
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
 -export([code_reload/1]).
--export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, set_val/3]).
+-export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, get_val/3, set_val/3]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
 	 redirect_to/3]).
@@ -278,14 +278,21 @@ get_required_field(Key, PInf) ->
 	    gen_fsm:send_event(self(), kill_yourself)
     end.
 
+
+%% @spec get_val(atom(), TupleList1, Default::term()) -> Val::term() | Default::term()
+%% TupleList = [{Key::atom(), Val::term()}]
+%% @doc returns value with key Key or Default if not found
+get_val(Key, Args, Default) ->
+    case (catch lists:keysearch(Key, 1, Args)) of
+	{value,{Key, Val}} -> Val;
+	_ -> Default
+    end.
+
 %% @spec get_val(atom(), TupleList1) -> Val::term() | 'NO KEY'
-%% TupleLis = [{Key::atom(), Val::term()}]
+%% TupleList = [{Key::atom(), Val::term()}]
 %% @doc returns value with key Key or 'NO KEY'
 get_val(Key, Args) -> 
-    case lists:keysearch(Key, 1, Args) of
-	{value,{Key, Val}} -> Val;
-	_ -> 'NO KEY'
-    end.
+    get_val(Key, Args, 'NO KEY').
 
 %% @spec set_val(atom(), term(), TupleList1) -> TupleList2
 %% TupleLis1 = [{Key::atom(), OldVal::term()}]
