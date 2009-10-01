@@ -5,4 +5,4 @@
 5. Напишите "!setconfig port 4111" чтобы установить порт хаба (обычно это 4111)
 6. Напишите "!setconfig name EADC", "!topic Some topic", "!setfile motd Some MOTD"
 7. Напишите "!addtorole anonymous self registration" чтобы разрешить пользователям регистрировать себя на хабе коммандой "!regme"
-
+8. Напишите "!addrole op Sonenick" чтобы сделать пользователя с ником Somenick оператором (модератором), чтобы он мог менять топик, кикать и т.д.

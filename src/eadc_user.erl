@@ -28,9 +28,13 @@ init() ->
     eadc_app:start_table(role, [{attributes,
 				 record_info(fields, role)},
 				{disc_copies, [node()]}], []),
+    Run=fun()->
+		lists:map(fun(Perm)-> mnesia:dirty_write(#permission{roles=[op],permission=Perm})
+			  end, ['reg user','drop any','kick any','change topic','set files'])
+	end,
     eadc_app:start_table(permission, [{attributes,
 				       record_info(fields, permission)},
-				      {disc_copies, [node()]}], []),
+				      {disc_copies, [node()]}], [{run, Run}]),
     ok.
 
 %% @spec access(atom()) -> true | false

@@ -5,4 +5,4 @@
 5. Type "!setconfig port 4111" set your hub's port (4111 is default value)
 6. Type "!setconfig name EADC", "!topic Some topic", "!setfile motd Some MOTD"
 7. Type "!addtorole anonymous self registration" to allow users to register themselves by "!regme" command
-
+8. Type "!addrole op Sonenick" to make user with nick Somenick will be operator and will have permission to kick, change topic, etc.

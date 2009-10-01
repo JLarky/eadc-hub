@@ -102,7 +102,7 @@ init([]) ->
 
 'PROTOCOL STAGE'(timeout, State) ->
     Not_set=make_ref(),
-    Host=eadc_utils:get_option(hub, host, Not_set),
+    Host=eadc_utils:get_option(hub, hostname, Not_set),
     Port=eadc_utils:get_option(hub, port, Not_set),
     if %% most likely that timeout is coused by connecting in nmdc mode
 	((Host /= Not_set) and (Port /= Not_set)) ->

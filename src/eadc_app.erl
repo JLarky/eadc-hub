@@ -157,5 +157,11 @@ start_table(TableName, MnesiaOptions, Options) ->
 	    end;
 	false ->
 	    {atomic, ok}=mnesia:create_table(TableName,MnesiaOptions),
+	    case eadc_utils:get_val(run, Options) of
+                Fun when is_function(Fun) ->
+		    Fun();
+		_ ->
+		    ok
+	    end,
 	    ok
     end.

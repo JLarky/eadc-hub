@@ -345,11 +345,12 @@ Roles:
                 true ->  ok;
                 false -> throw({error,"You don't have permission."})
             end,
-	    [Role|Permission]= case get_fields(Args,2) of
+	    [Role|Permission_]= case get_fields(Args,2) of
 				   A=[_,_] -> A;
 				   _ -> throw({error, "Error: see help for usage"})
 			       end,
-	    case mnesia:dirty_read(permission, list_to_atom(Permission)) of
+	    Permission=list_to_atom(string:join(Permission_, " ")),
+	    case mnesia:dirty_read(permission, Permission) of
 		[Perms] ->
 		    Roles=Perms#permission.roles;
 		[] ->
@@ -361,7 +362,7 @@ Roles:
 		    {"addtorole", true} -> throw({error, "Already added"});
 		    {"delfromrole", false} -> throw({error, "No such permission in role"})
 		end,
-	    Record=#permission{permission=list_to_atom(Permission),roles=NewRoles},
+	    Record=#permission{permission=Permission,roles=NewRoles},
 	    case NewRoles of
 		[] ->
 		    %% удаляет запись если удаляем последнюю роль из права.
@@ -375,10 +376,11 @@ Roles:
                 true ->  ok;
                 false -> throw({error,"You don't have permission."})
             end,
-	    [Role|Login]=case get_fields(Args,2) of
+	    [Role|Login_]=case get_fields(Args,2) of
 			     A=[_,_] -> A;
 			     _ -> throw({error, "Error: see help for usage"})
 			 end,
+	    Login=string:join(Login_," "),
 	    Acc=eadc_utils:account_get(Login),
 	    Roles=case is_record(Acc,account) of
 		      true ->
