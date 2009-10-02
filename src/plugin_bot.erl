@@ -100,7 +100,7 @@ chat_msg(Args) ->
     ?GET_VAL(data, Data),
     case Msg of 
 	[$!|Command] -> %% command
-	    Params=[binary_to_list(X) || X <- re:split(Command, " ")],
+	    Params=eadc_utils:s2a(Command),
 	    State=eadc_utils:get_val(state, Args),
 	    Client=eadc_utils:get_val(client, Args),
 	    try do_command(Params, State, Client)
