@@ -8,18 +8,23 @@
 -author('jlarky@gmail.com').
  
 -include("eadc.hrl").
--include("eadc_plugin.hrl").
--include("plugin_punklan.hrl").
 
 -export([init/0,terminate/0]).
 
--export([ctm/1, rcm/1, chat_msg/1]). %% some hook that you want to catch
+-export([user_login/1, ctm/1, rcm/1, chat_msg/1]). %% some hook that you want to catch
+
+-export([network_update/0, whois/1]).
 
 init() -> ok.
 terminate() -> ok.
 
+user_login(Args) ->
+    eadc_utils:send_to_pid(self(), {args, ["ICMD", "IP",
+					   "TTBMSG\s%[mySID]\s.ip\\s%[userNI]\n", "CT15"]}),
+    Args.
+
 chat_msg(Args) ->
-    ?GET_VAL(msg, Msg),
+    Msg=eadc_utils:get_val(msg,Args),
     case Msg of
 	[$., $i, $p, $\  | Tail] ->
 	    try
@@ -73,25 +78,50 @@ ctm(Args) ->
 	    eadc_utils:info_to_pid(self(), io_lib:format("Error: ~p\n",[Error])),
 	    Args
     end.
-
  
-    %% if we want see Erlang term in chat we have do like that
-    %%Out='gen_fsm:sync_send_all_state_event(self(), get_state, 1000)',
-    
- 
-    %%Out={whois(State_f#state.addr), whois(State_t#state.addr)},
-    %%Out="",
- 
-    %%Test=lists:flatten(io_lib:format("~w", [Out])),
-    %%eadc_utils:error_to_pid(self(), Test),
- 
-    %% YOU ALWAYS MAST DO THAT
-    %%Args.
- 
- 
-whois({N1, N2, N3, N4}) ->
-    ?GET_CAMPUS_NAME(N4+256*(N3+256*(N2+256*N1))).
+whois({N1,N2,N3,N4}) ->
+    IP=N4+256*(N3+256*(N2+256*N1)),
+    Update_time=eadc_utils:get_option(punklan, lastupdate, {{0,0,0},{0,0,0}}),
+    case (catch calendar:time_difference(Update_time,calendar:local_time())) of
+	{0,_} ->
+	    ok;
+	{_Day,_} ->
+	    network_update();
+	_ -> %% error
+	    network_update()
+    end,
+    Networks=eadc_utils:get_option(punklan, networks, ""),
+    Camp=lists:foldl(fun({IP1,IP2,C},C_so_far) ->
+			     case ((IP>=IP1)and(IP=<IP2)) of
+				 true -> C;
+				 false-> C_so_far
+			     end
+		     end, inet, Networks),
+   Camp.
 
 
 f(F, A) ->
     lists:flatten(io_lib:format(F, A)).
+
+
+network_update() ->
+    inets:start(),
+    {ok, {_,_, A}}=http:request("http://spb.edu/campus/networks.txt"),
+    {ok, B}=regexp:split(A, "\n"),
+    %% C - list ok {start_ip, end_ip, campus}
+    C=lists:foldl(fun(String, Acc) ->
+			  case String of
+			      [$#|_] ->
+				  Acc;
+			      [] ->
+				  Acc;
+			      _ ->
+				  {ok,[Ip_range,Campus]} = regexp:split(String, "\tcampus"),
+				  {ok,[Ip,Range]} = regexp:split(Ip_range, "/"),
+				  {ok, {N1,N2,N3,N4}}=inet_parse:address(Ip),
+				  IP=N4+256*(N3+256*(N2+256*N1)),
+				  RANGE=1 bsl (32-list_to_integer(Range)),
+				  [{IP, IP+RANGE, list_to_integer(Campus)}|Acc]
+			  end end, [], B),
+    eadc_utils:set_option(punklan, lastupdate, calendar:local_time()),
+    eadc_utils:set_option(punklan, networks, C).
