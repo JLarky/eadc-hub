@@ -107,7 +107,7 @@ f(F, A) ->
 network_update() ->
     inets:start(),
     {ok, {_,_, A}}=http:request("http://spb.edu/campus/networks.txt"),
-    {ok, B}=regexp:split(A, "\n"),
+    B=string:tokens(A,"\n"),
     %% C - list ok {start_ip, end_ip, campus}
     C=lists:foldl(fun(String, Acc) ->
 			  case String of
@@ -116,8 +116,8 @@ network_update() ->
 			      [] ->
 				  Acc;
 			      _ ->
-				  {ok,[Ip_range,Campus]} = regexp:split(String, "\tcampus"),
-				  {ok,[Ip,Range]} = regexp:split(Ip_range, "/"),
+				  [Ip_range,Campus] = string:tokens(String, "\tcampus"),
+				  [Ip,Range] = string:tokens(Ip_range, "/"),
 				  {ok, {N1,N2,N3,N4}}=inet_parse:address(Ip),
 				  IP=N4+256*(N3+256*(N2+256*N1)),
 				  RANGE=1 bsl (32-list_to_integer(Range)),
