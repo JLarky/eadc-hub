@@ -159,7 +159,7 @@ init([]) ->
 
 		    Other_clients = all_pids(),
 		    Args=[{pids,Other_clients},{data,Inf},{sid,SID},{pid,My_Pid},{cid, Cid},
-			  {nick, Nick}, {inf, Inf}, {addr,Addr},{state,New_State}],
+			  {nick, Nick}, {inf, Inf}, {addr,Addr},{state,New_State},{login,Login}],
 
 		    case need_authority(Nick, Cid) of
 			true ->
@@ -498,7 +498,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		[{pids, Pids}, {data, New_Inf_to_send}, {state, State}];
 	    {"D","CTM"} ->
 		{pid,[Pid]} = {pid,Pids},
-		case is_pid(Pid) of
+		case (is_pid(Pid)and is_pid(Client#client.pid)) of
 		    true ->
 			Args2=get_val(par, Args),
 			Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
@@ -511,7 +511,7 @@ client_command(Header, Command, Args, Pids, State) ->
 		end;
 	    {"D","RCM"} ->
 		{pid,[Pid]} = {pid,Pids},
-		case is_pid(Pid) of
+		case (is_pid(Pid)and is_pid(Client#client.pid)) of
 		    true ->
 			Args2=get_val(par, Args),
 			Sid=eadc_utils:unbase32(get_val(my_sid, Args)),
@@ -629,7 +629,6 @@ user_login(Sid,Nick,Cid,Args) ->
     Sup=get_val(sup, State#state.other),
     Client=Hooked_Client#client{sup=Sup},
     New_Args=eadc_utils:set_val(client, Client, Hooked_Args),
-    
     case is_record(Client, client) of
 	true ->
 	    lists:foreach(fun(#client{inf=CInf}) ->

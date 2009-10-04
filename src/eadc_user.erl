@@ -13,6 +13,7 @@
 -export([init/0]).
 -export([access/1,access/2]).
 -export([get_client_account/1, client_find/1]).
+-export([add_permission/2,del_permission/2]).
 
 %%====================================================================
 %% API
@@ -95,6 +96,44 @@ client_find(Client) when is_record(Client, client) ->
 	_ ->
 	    undefined
     end.
+
+%% @spec add_permission(Permission, Role) -> ok
+%% @doc Addes permission to role
+add_permission(Permission, Role) ->
+    Roles=case mnesia:dirty_read(permission, Permission) of
+	      [Perms] -> Perms#permission.roles;
+	      [] -> []
+	  end,
+    case lists:member(Role,Roles) of
+	true -> 
+	    'already added';
+	false ->
+	    Record=#permission{permission=Permission,roles=[Role|Roles]},
+	    mnesia:dirty_write(Record),ok
+    end.
+
+%% @spec del_permission(Permission, Role) -> ok
+%% @doc Deletes permission to role
+del_permission(Permission, Role) ->
+    Roles=case mnesia:dirty_read(permission, Permission) of
+	      [Perms] -> Perms#permission.roles;
+	      [] -> []
+	  end,
+    case lists:member(Role,Roles) of
+	false ->
+	    'not exist';
+	true ->
+	    NewRoles=lists:delete(Role,Roles),
+	    Record=#permission{permission=Permission,roles=NewRoles},
+	    case NewRoles of
+                [] ->
+                    %% удаляет запись если удаляем последнюю роль из права.
+                    mnesia:dirty_delete_object(Record#permission{roles=Roles});
+                _ ->
+                    mnesia:dirty_write(Record)
+            end,ok
+    end.
+
 
 %%====================================================================
 %% Internal functions

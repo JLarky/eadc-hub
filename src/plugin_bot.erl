@@ -158,7 +158,7 @@ Roles:
 			[UserName|Pass_] ->
 			    Pass=string:join(Pass_, " "),
 			    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,
-								 pass=Pass}),
+								 pass=Pass, roles=[user]}),
 			    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p",
 										       [Ok])));
 			_ -> throw({error, "usage: !regnewuser <name> <pass>"})
@@ -175,9 +175,9 @@ Roles:
 	    case mnesia:table_info(account, size) of
 		0 -> %% first user
 		    eadc_utils:info_to_pid(self(), "Register superuser."),
-		    Roles=[root];
+		    Roles=[user,root];
 		_ ->
-		    Roles=[]
+		    Roles=[user]
 	    end,
 	    case Client#client.login of
 		'NO KEY' ->
