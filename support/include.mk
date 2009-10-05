@@ -28,12 +28,18 @@ ERL_OBJECTS := $(ERL_SOURCES:%.erl=$(EBIN_DIR)/%.$(EMULATOR))
 ERL_DOCUMENTS := $(ERL_SOURCES:%.erl=$(DOC_DIR)/%.html)
 ERL_OBJECTS_LOCAL := $(ERL_SOURCES:%.erl=./%.$(EMULATOR))
 APP_FILES := $(wildcard *.app)
-EBIN_FILES = $(ERL_OBJECTS) $(ERL_DOCUMENTS) $(APP_FILES:%.app=../ebin/%.app)
-EBIN_FILES_NO_DOCS = $(ERL_OBJECTS) $(APP_FILES:%.app=../ebin/%.app)
+REL_FILES := $(wildcard *.rel)
+EBIN_FILES_NO_DOCS = $(ERL_OBJECTS) $(APP_FILES:%.app=../ebin/%.app) $(REL_FILES:%.rel=../ebin/%.rel)
+EBIN_FILES = $(ERL_DOCUMENTS) $(EBIN_FILES_NO_DOCS)
+
 MODULES = $(ERL_SOURCES:%.erl=%)
 
 ../ebin/%.app: %.app
 	cp $< $@ || copy $< "$@"
+
+../ebin/%.rel: %.rel
+	cp $< $@ || copy $< "$@"
+
 
 $(EBIN_DIR)/%.$(EMULATOR): %.erl
 	$(ERLC) $(ERLC_FLAGS) -o $(EBIN_DIR) $<

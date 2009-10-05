@@ -1,11 +1,12 @@
 ebin/erl_crash.dump
 *~
 *#
-*crush.dump
+*crash.dump
 ebin/*.beam
 ebin/*.boot
 ebin/*.script
 ebin/*.app
+ebin/*.rel
 error.log
 Mnesia*
 priv/*.so

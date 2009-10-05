@@ -1,4 +1,4 @@
 #/bin/bash
 
 (cd ebin
-erl -pa deps/tiger/ebin/ -sname eadc -boot eadc $@)
+erl -pa ../deps/*/ebin/ -sname eadc -boot eadc $@)

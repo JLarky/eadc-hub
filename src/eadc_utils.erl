@@ -5,7 +5,7 @@
 -export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
--export([code_reload/1]).
+-export([code_reload/1, make_script/0]).
 -export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, get_val/3, set_val/3]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
@@ -180,6 +180,9 @@ code_reload(Module) ->
     io:format("~s\n", [os:cmd("cd .. && make")]),
     true = code:soft_purge(Module),
     code:load_file(Module).
+
+make_script() ->
+    systools:make_script("eadc",[{outdir, "ebin"},{path,["deps/*/ebin"]}]).
 
 %% @spec parse_inf(string()) -> TupleList
 %% TupleList = [Tuple]

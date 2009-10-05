@@ -9,7 +9,7 @@ eadc: ebin
 tiger:
 	(cd deps/tiger;$(MAKE); $(MAKE) tiger;)
 	(mkdir -p priv/)
-	(test -f priv/tiger_drv.so || ln -s ../deps/tiger/priv/tiger_drv.so priv/tiger_drv.so)
+	(test -f priv/tiger_drv.so || cp deps/tiger/priv/tiger_drv.so priv/tiger_drv.so)
 
 tiger-win:
 	cd deps\tiger && $(MAKE) && $(MAKE) tiger-win && cd ../..
@@ -46,7 +46,7 @@ clean: clean-docs
 	(cd src;$(MAKE) clean)
 	(cd deps/*/; $(MAKE) clean)
 	$(RM) -r priv
-	$(RM) ebin/*.boot ebin/*.script ebin/*crash.dump ebin/*~ src/*~ priv/*~
+	$(RM) ebin/*.boot ebin/*.script ebin/*crash.dump ebin/*~ src/*~ priv/*~ *~ \#*\#
 
 clean-docs: clean-html
 	$(rm) -rf doc/edoc
@@ -56,8 +56,8 @@ clean-html:
 
 boot: ebin/eadc.boot
 
-ebin/eadc.boot:
-	(cd ebin && erl -noshel -run systools make_script "eadc" -run erlang halt )
+ebin/eadc.boot: ebin/eadc.rel ebin/eadc.app
+	erl -pa ebin -noshel -run eadc_utils make_script -run erlang halt
 
 cleandb:
 	$(RM) -r ebin/Mnesia*
