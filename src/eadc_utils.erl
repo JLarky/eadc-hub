@@ -17,6 +17,8 @@
 
 -export([get_unix_timestamp/1]).
 
+-export([test/0,profile/1]).
+
 -include("eadc.hrl").
 
 %% @doc Converts <code>"some little\sstring" -> ["some", "little string"]</code>
@@ -80,10 +82,12 @@ random_string_(Length, Acc) ->
 %% @see unbase32/1
 base32(V) when (V >=0) and (V < 32)->
     if
-	V < 0 -> error;
-	V < 26 -> [V+65];
-	V > 25 -> [V+24] % V-26+48+2
+        V < 26 ->
+	    [V+65];
+        V > 25 ->
+	    [V+24] % V-26+48+2
     end;
+
 base32(V) ->
     base32(V bsr 5)++base32(V rem 32).
 
@@ -91,23 +95,23 @@ base32(V) ->
 %% @doc returns base32 encoded string of String
 %% @see base32_decode/1
 base32_encode(String) ->
-    base32_encode_(list_to_binary(String), _Out=[]).
+    lists:reverse(base32_encode_(list_to_binary(String), _Out=[])).
 
 base32_encode_(Bin, Out) ->
     case Bin of
 	<<>> ->
 	    Out;
 	<<A:1>> ->
-	    Out++base32(A bsl 4);
+	    [B]=base32(A bsl 4),[B|Out];
 	<<A:2>> ->
-	    Out++base32(A bsl 3);
+	    [B]=base32(A bsl 3),[B|Out];
 	<<A:3>> ->
-	    Out++base32(A bsl 2);
+	    [B]=base32(A bsl 2),[B|Out];
 	<<A:4>> ->
-	    Out++base32(A bsl 1);
+	    [B]=base32(A bsl 1),[B|Out];
 	Bin ->
 	    <<A:5, T/bitstring>>=Bin,
-	    base32_encode_(T, Out++base32(A))
+	    [B]=base32(A),base32_encode_(T, [B|Out])
     end.
 
 %% @spec unbase32(base32char()) -> integer()
@@ -394,3 +398,11 @@ get_options(OptionTemplate) when is_record(OptionTemplate, option)->
 get_unix_timestamp({_MegaSecs, _Secs, _MicroSecs}=TS) ->
     calendar:datetime_to_gregorian_seconds( calendar:now_to_universal_time(TS) ) -
 	calendar:datetime_to_gregorian_seconds( {{1970,1,1},{0,0,0}}).
+
+
+profile(Module) ->
+    code_reload(Module),fprof:apply(Module, test, []),fprof:profile(),fprof:analyse().
+
+test() ->
+    "MFZWIMJSGMYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYQ"=base32_encode("asd12311111111111111111111111111111111111111111111111111111111111111111111111111111111111111"),
+    ok.
