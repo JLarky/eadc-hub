@@ -5,7 +5,7 @@
 -export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
--export([code_reload/1, make_script/0]).
+-export([code_reload/1, make_script/0, make_tar/1]).
 -export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, get_val/3, set_val/3]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
@@ -183,6 +183,23 @@ code_reload(Module) ->
 
 make_script() ->
     systools:make_script("eadc",[{outdir, "ebin"},{path,["deps/*/ebin"]}]).
+
+make_tar(Dir) ->
+    Name="eadc",TarFileName = io_lib:fwrite("~s/~s.tar.gz", [Dir,Name]),
+    ok=systools:make_tar(Name, [{erts,code:root_dir()},{outdir,Dir}]),
+    TmpDir=Dir++"/tmp",file:make_dir(TmpDir),
+    %%os:cmd("(cd "++TmpDir++"&& tar xf "++TarFileName++")"),
+    erl_tar:extract(TarFileName,[compressed,{cwd,TmpDir}]),file:delete(TarFileName),
+    Start=TmpDir++"/start.sh",
+    file:write_file(Start,
+		    <<"#/bin/sh\nerts-*/bin/erl -boot releases/ADC\\ Hub/start -pa lib/*/*\n">>),
+    os:cmd("chmod +x "++Start),
+    %%os:cmd("(cd "++TmpDir++"&& tar cf "++TarFileName++" .)"),
+    {ok, Cwd} = file:get_cwd(),file:set_cwd(TmpDir),
+    (catch erl_tar:create(TarFileName,["."],[compressed])),
+    file:set_cwd(Cwd),
+    os:cmd("rm -r "++TmpDir),
+    ok.
 
 %% @spec parse_inf(string()) -> TupleList
 %% TupleList = [Tuple]

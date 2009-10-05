@@ -42,12 +42,12 @@ start(_Type, _Args) ->
 			      _ ->
 				  false
 			  end
-		  end, ["priv", "../priv"]),
+		  end, ["priv", "../priv"]++filelib:wildcard("lib/tiger-*/priv")),
     case Loaded of
 	true ->
 	    {ok,spawn(fun() -> supervisor:start_link({local, ?MODULE}, ?MODULE, SharedLib)end)};
 	false ->
-	    exit({error, could_not_load_driver___r})
+	    exit({error, could_not_load_driver})
     end.
 
 init(SharedLib) ->
