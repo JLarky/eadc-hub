@@ -133,7 +133,10 @@ init([]) ->
 		    P_Inf=eadc_utils:parse_inf(Data),
 
 		    PID=eadc_utils:get_required_field('PD', P_Inf),
-		    Nick=eadc_utils:get_required_field('NI', P_Inf),
+		    Nick=case eadc_utils:get_val('NI', "", P_Inf) of
+			     "" -> "not_set:"++eadc_utils:base32_encode(eadc_utils:random_string(5));
+			     N -> N
+		    end,
 		    Cid_f=eadc_utils:get_required_field('ID', P_Inf),
 		    Cid=get_unical_cid(Cid_f),
 

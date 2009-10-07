@@ -6,7 +6,7 @@
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
 -export([code_reload/1, make_script/0, make_tar/1]).
--export([parse_inf/1, deparse_inf/1, get_required_field/2, get_val/2, get_val/3, set_val/3]).
+-export([parse_inf/1, deparse_inf/2, get_required_field/2, get_val/2, get_val/3, set_val/3]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
 	 redirect_to/3]).
@@ -211,22 +211,22 @@ make_tar(Dir) ->
 %% @see get_val/2
 %% @see deparse_inf/1
 parse_inf(Inf) ->
-    List = s2a(Inf),
+    ["BINF", SID |List] = s2a(Inf),
     lists:map(fun([H1,H2|T]) ->
 		      {list_to_atom([H1,H2]), T}
 	      end, List).
 
-%% @spec deparse_inf(TupleList) -> string()
+%% @spec deparse_inf(SID::string(),TupleList) -> string()
 %% TupleList = [Tuple]
 %% Tuple = {Key, Val}
 %% Key = atom()
 %% Val = string()
 %% @doc combines parsed inf message like [{'NI', "test"}, {'DE', "desc"}] into "NItest DEdesc"
 %% @see parse_inf/1
-deparse_inf(Parsed_Inf) ->
+deparse_inf(SID, Parsed_Inf) ->
     lists:foldl(fun({Key, Val}, Acc) ->
 			lists:concat([Acc," ",Key,Val])
-		end, "", Parsed_Inf).
+		end, "BINF "++SID, Parsed_Inf).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
