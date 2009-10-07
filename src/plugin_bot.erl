@@ -250,7 +250,8 @@ Roles:
 		    Topic=string:join(Args, " "),
 		    _Ok=eadc_utils:set_option(mainchat, topic, Topic),
 		    AllPids=eadc_client_fsm:all_pids(),
-		    topic_to_pids(AllPids);		    
+		    topic_to_pids(AllPids),
+		    eadc_utils:broadcast({info, Client#client.nick++" sets the topic to: "++Topic});
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")
 	    end;
