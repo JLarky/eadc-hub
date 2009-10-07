@@ -211,7 +211,7 @@ make_tar(Dir) ->
 %% @see get_val/2
 %% @see deparse_inf/1
 parse_inf(Inf) ->
-    ["BINF", SID |List] = s2a(Inf),
+    ["BINF", _SID |List] = s2a(Inf),
     lists:map(fun([H1,H2|T]) ->
 		      {list_to_atom([H1,H2]), T}
 	      end, List).
@@ -285,10 +285,9 @@ redirect_to(Pid, Sid, Hub) ->
     R_msg="You are redirected to "++Hub,
     eadc_utils:info_to_pid(Pid, R_msg),
     SID= if
-	     is_integer(Sid) -> unbase32(Sid);
+	     is_integer(Sid) -> base32(Sid);
 	     is_list(Sid) -> Sid
 	 end,
-    io:format("!~w\n", [SID]),
     eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RD"++Hub, "MS"++R_msg]}),
     gen_fsm:send_event(Pid, kill_yourself).
 

@@ -34,9 +34,9 @@ topic_to_pids(Pids) ->
 
 user_login(Args) ->
     eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
-					   "TTBMSG\s%[mySID]\s!help\n", "CT1"]}),
-%%    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Admin\\redirect",
-%%					   "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]\n", "CT2"]}),
+					   "TTBMSG\s%[mySID]\s!help\n", "CT15"]}),
+    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Admin\\redirect",
+					   "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]\\s%[line:Enter URL]\n", "CT15"]}),
 
     %%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
     topic_to_pids([self()]),
@@ -355,13 +355,29 @@ Roles:
 	"redirectsid" ->
 	    case eadc_user:access('redirect') of
 		true ->
-		    [SID_|_]=Args,Sid=eadc_utils:unbase32(SID_),
-		    io:format("~p\n", [Sid]),
-		    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
-		    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net");
+		    ok;
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
-	    end;
+		    throw({error,"You don't have permission."})
+            end,
+	    [Sid_|Url_]= get_fields(Args,2),
+	    Sid=eadc_utils:unbase32(Sid_),[Url|_]=Url_,
+	    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
+	    eadc_utils:redirect_to(Pid, Sid_, Url);
+	"redirectall" ->
+	    case eadc_user:access('redirect all') of
+		true ->
+		    ok;
+		false ->
+		    throw({error,"You don't have permission."})
+            end,
+	    [Url|_]=Args,AllPids=eadc_client_fsm:all_pids(),
+	    F=fun(Pid) ->
+		      [User_Client]=eadc_user:client_find(#client{pid=Pid, _='_'}),
+		      Sid=User_Client#client.sid,
+		      eadc_utils:redirect_to(Pid, Sid, Url),
+		      io:format("~p\n", [{Pid, Sid, Url}])
+	      end,
+	    lists:foreach(F, AllPids);
 	Command when (Command=="addtorole") or (Command=="delfromrole") ->
             case eadc_user:access('change permission') of
                 true ->  ok;
