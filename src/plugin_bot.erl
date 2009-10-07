@@ -180,12 +180,12 @@ Roles:
 		    Roles=[user]
 	    end,
 	    case Client#client.login of
-		'NO KEY' ->
+		undefined ->
 		    fine;
 		UserLogin ->
 		    throw({error,"You are allredy registered as '"++UserLogin++"'"})
 	    end,
-	    case eadc_user:access('self registration') or (Roles==[root]) of
+	    case eadc_user:access('self registration') or (Roles==[user,root]) of
 		true ->
 		    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,
 								   pass=Pass,roles=Roles}),
