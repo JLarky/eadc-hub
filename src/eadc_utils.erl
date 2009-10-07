@@ -299,7 +299,8 @@ get_required_field(Key, PInf) ->
 	Not_found_or_error ->
 	    ?DEBUG(error, "~w not fount required_field ~w: ~w", [self(), Key, Not_found_or_error]),
 	    error_to_pid(self(), lists:concat(["Required field ", Key, " not found"])),
-	    gen_fsm:send_event(self(), kill_yourself)
+	    gen_fsm:send_event(self(), kill_yourself),
+	    ""
     end.
 
 
