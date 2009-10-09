@@ -1,3 +1,6 @@
+For first time you have to run
+git submodule update --init # get latest version of tiger hash from github.com
+
 To install do:
 make
 make tiger # Lunux

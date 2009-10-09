@@ -1,0 +1,3 @@
+[submodule "dept/tiger"]
+	path = dept/tiger
+	url = git://github.com/JLarky/erlang-tiger-hash.git
