@@ -1,20 +1,22 @@
-For first time you have to run
-git submodule update --init # get latest version of tiger hash from github.com
+For the first time you have to run:
+ git clone git://github.com/JLarky/eadc-hub.git
+ cd eadc-hub
+ git submodule update --init # get latest version of tiger hash from github.com
 
-To install do:
-make
-make tiger # Lunux
-make tiger-win # Windows
+To install:
+ make tiger # Linux
+ make tiger-win # Windows
+ make
 
-To start hub do
-./EADC # Linux
-EADC.bat # Windows
+To start hub:
+ ./EADC # Linux
+ EADC.bat # Windows
 
 And check it on adc://localhost:4111
 
 Also try run "!help" in chat.
 
-First registered user (by !regme pass) will be superuser.
+ First registered user (by !regme pass) will be superuser. For futher instruction see INSTALL.txt
 
 
 Requirements:
@@ -24,4 +26,4 @@ Requirements:
 
 Troubleshooting:
 
-If you got "error: erl_driver.h: No such file or directory" when run 'make tiger' than please read deps/tiger/README
+If you got "error: erl_driver.h: No such file or directory" when run 'make tiger' then please read deps/tiger/README
