@@ -1,4 +1,3 @@
 #/bin/bash
 
-(cd ebin
-erl -pa ../deps/*/ebin/ -sname eadc -boot eadc $@)
+(cd `dirname $0`/ebin && erl -pa ../deps/*/ebin/ -sname eadc -boot eadc $@)
