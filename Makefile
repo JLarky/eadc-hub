@@ -57,6 +57,7 @@ clean-html:
 boot: ebin/eadc.boot
 
 ebin/eadc.boot: ebin/eadc.rel ebin/eadc.app
+	priv/relre.erl ebin/eadc.rel
 	erl -pa ebin -noshel -run eadc_utils make_script -run erlang halt
 
 cleandb:
