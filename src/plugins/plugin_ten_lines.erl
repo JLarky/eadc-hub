@@ -14,6 +14,9 @@
 
 -export([init/0,terminate/0]).
 
+%debug
+-export([ten_lines/0]).
+
 init() ->
     ok.
 init(Args) ->
@@ -49,18 +52,23 @@ user_login(Args) ->
     ?GET_VAL(pid, Pid),
     ?DEBUG(debug, "~w: user_login ~w", [?MODULE, Pid]),
 
-    case catch eadc_utils:get_option(ten_lines, tenlines, []) of
+    {ok,Ten_lines}=(catch ten_lines()),
+    eadc_utils:info_to_pid(self(), lists:concat([Ten_lines])),
+    Args.
+
+
+ten_lines() ->
+    case eadc_utils:get_option(ten_lines, tenlines, []) of
 	Msgs=[_|_] ->
 	    Ten_lines = lists:foldl(fun({Time, _Sid, Msg, Nick}, Acc) ->
-					    lists:concat([Acc, Nick, " (",time_diff(Time),"):\n> ", Msg, "\n"])
+					    {_,{A,S,D}}=Time,
+					    lists:concat([Acc, "[",A,":",S,":",D,"] <",Nick, "> ", Msg, "\n"])
 				    end, "Последние сообщения хаба:\n", Msgs),
-	    eadc_utils:info_to_pid(self(), Ten_lines),
-	    Args;
-	_ -> %% беда
-	    Args
+	    {ok,Ten_lines};
+	HZ ->
+	    HZ
     end.
-
-
+    
 
 
 time_diff(Time) ->
