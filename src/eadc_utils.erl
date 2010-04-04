@@ -6,10 +6,13 @@
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
 -export([code_reload/1, make_script/0, make_tar/1]).
--export([parse_inf/1, deparse_inf/2, get_required_field/2, get_val/2, get_val/3, set_val/3]).
+-export([parse_inf/1, deparse_inf/2, get_required_field/3, get_val/2, get_val/3, set_val/3]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
 	 redirect_to/3]).
+
+-export([send_to_senders/2,send_to_sender/2,error_to_sender/2, info_to_sender/2,
+	 send_to_clients/2,send_to_client/2,error_to_client/2, info_to_client/2]).
 
 -export([account_write/1, account_all/0, account_get/1, account_get_login/2]).
 
@@ -233,6 +236,39 @@ deparse_inf(SID, Parsed_Inf) ->
 %% Communication functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+send_to_clients(Clients, Param) ->
+    lists:foreach(fun(Client) ->
+                          send_to_client(Client, Param)
+                  end, Clients).
+
+send_to_client(Client, Param) ->
+    send_to_sender(Client#client.sender,Param).
+
+%% @spec send_to_senders(Senders, Message::term()) -> ok
+%% Senders = [sender()]
+%% @doc applies send_to_sender/2 to every sender of Senders
+%% @see send_to_sender/2
+send_to_senders(Senders, Param) when is_list(Senders) ->
+    lists:foreach(fun(Sender) ->
+			  send_to_sender(Sender, Param)
+		  end, Senders).
+
+%% @spec send_to_sender(sender(), Param::term()) -> ok
+%% Param = {list, List} | {args, List} | List
+%% List = string()
+%% @doc applies {@link convert/1} to Param if needed and sends String to socket controlled by sockroute
+%%send_to_sender(Sender, {list, List}) when is_list(List) ->
+%%    {string, String} = eadc_utils:convert({list, List}),
+%%    eadc_utils:send_to_sender(Sender, String);
+send_to_sender(Sender, {args, List}) when is_list(List) ->
+    String = eadc_utils:a2s(List),
+    send_to_sender(Sender, String);
+send_to_sender(Sender, String) when is_record(Sender,sender) and is_list(String) ->
+    sockroute:sendn(Sender, String);
+send_to_sender(Unknown1, Unknown2) ->
+    ?DEBUG(error, "send_to_pid(~w, ~w)\n", [Unknown1, Unknown2]).
+
+
 %% @spec send_to_pids(Pids, Message::term()) -> ok
 %% Pids = [pid()]
 %% @doc applies send_to_pid/2 to every pid of Pids
@@ -274,12 +310,34 @@ broadcast(F) when is_function(F) ->
 
 %% @spec error_to_pid(pid(), string()) -> ok
 %% @doc sends error message to Pid by {@link send_to_pid/2}
+error_to_client(Client, Message) when is_record(Client,client) ->
+    send_to_sender(Client#client.sender, {args, ["ISTA", "100", Message]}).
+%% @spec info_to_pid(pid(), string()) -> ok
+%% @doc sends info message to Pid by {@link send_to_pid/2}
+info_to_client(Client, Message) when is_record(Client,client) ->
+    send_to_sender(Client#client.sender, {args, ["ISTA", "000", Message]}).
+
+%% @spec error_to_pid(pid(), string()) -> ok
+%% @doc sends error message to Pid by {@link send_to_pid/2}
+error_to_sender(Sender, Message) when is_record(Sender,sender) ->
+    send_to_sender(Sender, {args, ["ISTA", "100", Message]}).
+%% @spec info_to_pid(pid(), string()) -> ok
+%% @doc sends info message to Pid by {@link send_to_pid/2}
+info_to_sender(Sender, Message) when is_record(Sender,sender) ->
+    send_to_sender(Sender, {args, ["ISTA", "000", Message]}).
+
+
+
+%% @spec error_to_pid(pid(), string()) -> ok
+%% @doc sends error message to Pid by {@link send_to_pid/2}
 error_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "100", Message]}).
 %% @spec info_to_pid(pid(), string()) -> ok
 %% @doc sends info message to Pid by {@link send_to_pid/2}
 info_to_pid(Pid, Message) ->
     send_to_pid(Pid, {args, ["ISTA", "000", Message]}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 redirect_to(Pid, Sid, Hub) ->
     R_msg="You are redirected to "++Hub,
@@ -291,15 +349,14 @@ redirect_to(Pid, Sid, Hub) ->
     eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RD"++Hub, "MS"++R_msg]}),
     gen_fsm:send_event(Pid, kill_yourself).
 
-get_required_field(Key, PInf) ->
+get_required_field(Key, PInf, Client) ->
     case (catch lists:keysearch(Key, 1, PInf)) of
 	{value,{Key, Val}} ->
 	    Val;
 	Not_found_or_error ->
 	    ?DEBUG(error, "~w not fount required_field ~w: ~w", [self(), Key, Not_found_or_error]),
-	    error_to_pid(self(), lists:concat(["Required field ", Key, " not found"])),
-	    gen_fsm:send_event(self(), kill_yourself),
-	    ""
+	    error_to_client(Client,lists:concat(["Required field ", Key, " not found"])),
+	    throw({stop,Client})
     end.
 
 

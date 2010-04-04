@@ -47,7 +47,7 @@ start(_Type, _Args) ->
     spawn(application,start, [tiger]),
 
     ListenPort = list_to_integer(get_app_env(listen_port, integer_to_list(?DEF_PORT))),
-    supervisor:start_link({local, ?MODULE}, ?MODULE, {eadc_sup, ListenPort, eadc_client_fsm}).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, {eadc_sup, ListenPort, eadc_client}).
 
 %% @spec stop(_S::term()) -> ok
 %% @doc Application callback

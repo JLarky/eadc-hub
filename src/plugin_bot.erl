@@ -26,20 +26,23 @@ terminate() ->
 init(_Args) ->
     init().
 
-topic_to_pids(Pids) ->
+topic_to_clients(Clients) ->
     Topic=eadc_utils:get_option(mainchat, topic, "No topic set"),
     HubName=eadc_utils:get_option(hub, name, "EADC. ADC hub written in Erlang"),
-    F=fun(P) -> eadc_utils:send_to_pid(P, {args, ["IINF", "CT32", "VEJLarky's hub", "NI"++HubName, "DE"++Topic]}) end,
-    lists:foreach(F, Pids).
+    F=fun(C) -> eadc_utils:send_to_client(C, {args, ["IINF", "CT32", "VEJLarky's hub", 
+						     "NI"++HubName, "DE"++Topic]}) end,
+    lists:foreach(F, Clients).
 
 user_login(Args) ->
-    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Commands\\General\\Help",
-					   "TTBMSG\s%[mySID]\s!help\n", "CT15"]}),
-    eadc_utils:send_to_pid(self(), {args, ["ICMD", "Admin\\redirect",
-					   "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]\\s%[line:Enter URL]\n", "CT15"]}),
+    Client=eadc_utils:get_val(client,Args),
+    eadc_utils:send_to_client(Client, {args, ["ICMD", "Commands\\General\\Help",
+					      "TTBMSG\s%[mySID]\s!help\n", "CT15"]}),
+    eadc_utils:send_to_client(Client, {args, ["ICMD", "Admin\\redirect",
+					      "TTBMSG\s%[mySID]\s!redirectsid\\s%[userSID]"
+					      "\\s%[line:Enter URL]\n", "CT15"]}),
 
     %%eadc_utils:send_to_pid(self(), {args, ["BINF", Bit_sid, "CT5", "ID"++Bot_id, "NItest-room", "DEтестовая комната"]}),
-    topic_to_pids([self()]),
+    topic_to_clients([Client]),
 
     %% check ban
     Nick=eadc_utils:get_val(nick, Args),IP=eadc_utils:get_val(addr, Args),
@@ -65,11 +68,11 @@ user_login(Args) ->
 	    New_Args2=eadc_utils:set_val(state, New_State, New_Args1),
 	    New_Args2;
 	false -> %% ban time is expired
-	    motd(),
+	    motd(Client),
 	    Args
     end.
 
-motd() ->
+motd(Client) ->
     %% MOTD
     Motd_def="Добро пожаловать в ADC-хаб написанный на Erlang. Страничка проекта http://wiki.github.com/JLarky/eadc-hub на ней можно узнать что такое ADC и почему именно Erlang.
 Инструкции по установке http://github.com/JLarky/eadc-hub/blob/master/INSTALL.ru.txt",
@@ -81,7 +84,7 @@ motd() ->
 	     _ ->
 		 Motd_cfg
 	 end,
-    eadc_utils:info_to_pid(self(), MOTD).
+    eadc_utils:info_to_client(Client, MOTD).
 
 user_quit(Args) ->
     State=eadc_utils:get_val(state, Args),
@@ -250,7 +253,7 @@ Roles:
 		    Topic=string:join(Args, " "),
 		    _Ok=eadc_utils:set_option(mainchat, topic, Topic),
 		    AllPids=eadc_client_fsm:all_pids(),
-		    topic_to_pids(AllPids),
+		    topic_to_clients(AllPids),
 		    eadc_utils:broadcast({info, Client#client.nick++" sets the topic to: "++Topic});
 		false ->
 		    eadc_utils:info_to_pid(self(), "You don't have permission.")

@@ -14,6 +14,7 @@
 				   end).
 
 -record(state, {
+	  states,
 	  socket,    % client socket
 	  buf,       % buffer for client messages sended in several tcp pockets
 	  addr,      % client address
@@ -26,14 +27,16 @@
 	 }).
 
 -record(client, {
-	  sid, %% SID. Key field
+	  sid, %% SID. Key field                      %%ADC
 	  pid, %% controlling plugin's name
-	  cid, %% client's CID
-	  nick,
+	  cid, %% client's CID                        %%ADC
+	  sender, %% {pid,socket} to send messages
+	  nick,                                       %%ADC
 	  login,
-	  inf, %% INF string to send to other clients
+	  inf, %% INF string to send to other clients %%ADC
 	  sup=[], %% SUP list of supported features
-	  addr %% client address
+	  addr, %% client address
+	  other
 	  }).
 
 -record(account, {
@@ -52,3 +55,4 @@
 -record(role, {role, desc}).
 -record(permission, {permission, roles}).
 -record(ban, {nick, ip, time, op, reason}).
+-record(sender, {socket,pid}).
