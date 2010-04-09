@@ -109,17 +109,19 @@ chat_msg(Args) ->
 	    try do_command(Params, State, Client)
 	    catch
 		throw:{error, Error} ->
-		    eadc_utils:error_to_pid(self(), Error);
+		    eadc_utils:error_to_client(Client, Error);
 		  Error ->
-		    throw({error,Error})
+		    eadc_utils:error_to_client(Client, "Report to admin.\nError: "++
+					       eadc_utils:thing_string(Error))
 	    end,
-	    Args1=lists:keyreplace(msg, 1, Args, {msg, []}),
-	    lists:keyreplace(pids, 1, Args1, {pids, []});
+	    Args1=eadc_utils:set_val(msg, [], Args),
+	    eadc_utils:set_val(senders, [], Args1);
 	_ -> 
-	    lists:keyreplace(data, 1, Args, {data, lists:sublist(Data, 512)})
+	    eadc_utils:set_val(data, lists:sublist(Data, 512), Args)
     end.
 
 do_command([Command|Args], _State, Client) ->
+    Account=eadc_utils:account_get(Client#client.login),
     case Command of
 	"help" ->
 	    Hlp="All hub commands:
@@ -153,16 +155,16 @@ Roles:
  !delfromrole <role> <permission> - deletes permission from role
  !addrole <role> <login> - addes role to login
  !delrole <role> <login> - deletes role from login\n",
-	    eadc_utils:info_to_pid(self(), Hlp);
+	    eadc_utils:info_to_client(Client, Hlp);
 	"regnewuser" ->
-	    case eadc_user:access('reg user') of
+	    case eadc_user:access(Account,'reg user') of
 		true ->
 		    case get_fields(Args, 2) of
 			[UserName|Pass_] ->
 			    Pass=string:join(Pass_, " "),
 			    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,
 								 pass=Pass, roles=[user]}),
-			    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("~p",
+			    eadc_utils:info_to_client(Client, lists:flatten(io_lib:format("~p",
 										       [Ok])));
 			_ -> throw({error, "usage: !regnewuser <name> <pass>"})
 		    end;
@@ -177,7 +179,7 @@ Roles:
 	    UserName=Client#client.nick,
 	    case mnesia:table_info(account, size) of
 		0 -> %% first user
-		    eadc_utils:info_to_pid(self(), "Register superuser."),
+		    eadc_utils:info_to_client(Client, "Register superuser."),
 		    Roles=[user,root];
 		_ ->
 		    Roles=[user]
@@ -188,41 +190,41 @@ Roles:
 		UserLogin ->
 		    throw({error,"You are allredy registered as '"++UserLogin++"'"})
 	    end,
-	    case eadc_user:access('self registration') or (Roles==[user,root]) of
+	    case eadc_user:access(Account,'self registration') or (Roles==[user,root]) of
 		true ->
 		    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,
 								   pass=Pass,roles=Roles}),
-		    eadc_utils:info_to_pid(self(), "User '"++UserName++"' was registered");
+		    eadc_utils:info_to_client(Client, "User '"++UserName++"' was registered");
 		false ->
-		    eadc_utils:error_to_pid(self(), "You don't have permission.")
+		    eadc_utils:error_to_client(Client, "You don't have permission.")
 	    end;
 	"drop" ->
-	    case eadc_user:access('drop any') of
+	    case eadc_user:access(Account,'drop any') of
 		true ->
 		    case get_fields(Args, 2) of
 			[UserName, Reason] ->
 			    OPName=Client#client.nick,
-			    drop(UserName, OPName, Reason);
+			    drop(Client,UserName, OPName, Reason);
 			_ -> throw({error, "usage !drop <name> <reason>"})
 		    end;
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"kick" ->
-	    case eadc_user:access('kick any') of
+	    case eadc_user:access(Account,'kick any') of
                 true ->
 		    case get_fields(Args, 2) of
                         [UserName, Reason] ->
 			    OPName=Client#client.nick,
-			    ban(UserName, OPName, Reason),
-			    drop(UserName, OPName, Reason);
+			    ban(Client,UserName, OPName, Reason),
+			    drop(Client,UserName, OPName, Reason);
 			_ -> throw({error, "usage !kick <name> <reason>"})
                     end;
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"ban" ->
-	    case eadc_user:access('ban any') of
+	    case eadc_user:access(Account,'ban any') of
                 true ->
 		    case get_fields(Args, 3) of
                         [UserName, Time_, Reason] ->
@@ -236,68 +238,67 @@ Roles:
 			_ -> throw({error, "usage !ban <name> <minutes> <reason>"})
                     end;
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"userlist" ->
 	    List=eadc_utils:account_all(),
-	    case eadc_user:access('view pass') of
+	    case eadc_user:access(Account,'view pass') of
 		true ->
 		    New_List=List;
 		false ->
 		    New_List=lists:map(fun(A) -> A#account{pass="***"} end, List)
 	    end,
-	    eadc_utils:info_to_pid(self(), lists:flatten(io_lib:format("Users:\n~p", [New_List])));
+	    eadc_utils:info_to_client(Client, lists:flatten(io_lib:format("Users:\n~p", [New_List])));
 	"topic" ->
-	    case eadc_user:access('change topic') of
+	    case eadc_user:access(Account,'change topic') of
 		true ->
 		    Topic=string:join(Args, " "),
 		    _Ok=eadc_utils:set_option(mainchat, topic, Topic),
-		    AllPids=eadc_client_fsm:all_pids(),
-		    topic_to_clients(AllPids),
+		    topic_to_clients(eadc_client:client_all()),
 		    eadc_utils:broadcast({info, Client#client.nick++" sets the topic to: "++Topic});
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"setconfig" ->
-	    case eadc_user:access('set config') of
+	    case eadc_user:access(Account,'set config') of
 		true ->
                     case get_fields(Args, 2) of
 			[Key | Rest] ->
 			    Val=string:join(Rest, " "),
 			    _Ok=eadc_utils:set_option(hub, list_to_atom(Key), Val),
-			    eadc_utils:info_to_pid(self(), "OK");
+			    eadc_utils:info_to_client(Client, "OK");
 			_ -> throw({error, "usage: !setconfig <key> <val>"})
 		    end;
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"getconfig" ->
-	    case eadc_user:access('get config') of
+	    case eadc_user:access(Account,'get config') of
 		true ->
 		    AllOptions=eadc_utils:get_options({option, {hub, '_'}, '_'}),
 		    Options=lists:map(fun(E) -> {hub, Key}=E#option.id,Val=E#option.val, 
 						lists:concat([Key," => '",Val,"'\n"]) end,
 				      AllOptions),
 		    Out=string:join(Options, " "),
-		    eadc_utils:info_to_pid(self(), "Config list:\n "++Out);
+		    eadc_utils:info_to_client(Client, "Config list:\n "++Out);
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
         "setfile" ->
-            case eadc_user:access('set files') of
+            case eadc_user:access(Account,'set files') of
                 true ->
                     case get_fields(Args, 2) of
 			[Key | Rest] ->
 			    Val=string:join(Rest, " "),
 			    _Ok=eadc_utils:set_option(files, list_to_atom(Key), Val),
-			    eadc_utils:info_to_pid(self(), "OK");
+			    eadc_utils:info_to_client(Client, "OK");
 			_ -> throw({error, "usage: !setfile <key> <val>"})
 		    end;
                 false ->
-                    eadc_utils:info_to_pid(self(), "You don't have permission.")
+                    eadc_utils:info_to_client(Client, "You don't have permission.")
             end;
 	"plugin" ->
-	    case eadc_user:access('plugin manage') of
+	    case eadc_user:access(Account,'plugin manage') of
                 true ->
 		    ok;
 		false ->
@@ -331,32 +332,31 @@ Roles:
 		    throw({error,"Plugin "++atom_to_list(MName)++" can't be "++M++"."});
 		ok ->
 		    eadc_plugin:set_plugins(New_PL),
-		    eadc_utils:info_to_pid(self(), "Plugin "++atom_to_list(MName)
+		    eadc_utils:info_to_client(Client, "Plugin "++atom_to_list(MName)
 					   ++" have been "++M++".");
 		{error, Error} ->
-		    eadc_utils:info_to_pid(self(), lists:flatten(Error))
+		    eadc_utils:info_to_client(Client, lists:flatten(Error))
 	    end;
 	"pluginlist" ->
-	    case eadc_user:access('plugin manage') of
+	    case eadc_user:access(Account,'plugin manage') of
                 true ->
 		    PL=eadc_plugin:get_plugins(),
 		    Out=lists:foldl(fun(Pname, Acc) -> Acc++"\n"++atom_to_list(Pname) end,"",PL),
-		    eadc_utils:info_to_pid(self(), Out);
+		    eadc_utils:info_to_client(Client, Out);
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"redirect" ->
-	    case eadc_user:access('redirect') of
+	    case eadc_user:access(Account,'redirect') of
                 true ->
 		    [Nick|_]=Args,
 		    [Cl|_]=eadc_user:client_find(#client{nick=Nick, _='_'}),
-		    {Pid, Sid}={Cl#client.pid, Cl#client.sid},
-		    eadc_utils:redirect_to(Pid, Sid, "dchub://jlarky.punklan.net");
+		    eadc_utils:redirect_to(Cl, "dchub://jlarky.punklan.net");
 		false ->
-		    eadc_utils:info_to_pid(self(), "You don't have permission.")
+		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"redirectsid" ->
-	    case eadc_user:access('redirect') of
+	    case eadc_user:access(Account,'redirect') of
 		true ->
 		    ok;
 		false ->
@@ -364,25 +364,23 @@ Roles:
             end,
 	    [Sid_|Url_]= get_fields(Args,2),
 	    Sid=eadc_utils:unbase32(Sid_),[Url|_]=Url_,
-	    Pid=eadc_client_fsm:get_pid_by_sid(Sid),
-	    eadc_utils:redirect_to(Pid, Sid_, Url);
+	    Cl=eadc_client:client_get(Sid),
+	    eadc_utils:redirect_to(Cl, Url);
 	"redirectall" ->
-	    case eadc_user:access('redirect all') of
+	    case eadc_user:access(Account,'redirect all') of
 		true ->
 		    ok;
 		false ->
 		    throw({error,"You don't have permission."})
             end,
-	    [Url|_]=Args,AllPids=eadc_client_fsm:all_pids(),
-	    F=fun(Pid) ->
-		      [User_Client]=eadc_user:client_find(#client{pid=Pid, _='_'}),
-		      Sid=User_Client#client.sid,
-		      eadc_utils:redirect_to(Pid, Sid, Url),
-		      io:format("~p\n", [{Pid, Sid, Url}])
+	    [Url|_]=Args,
+	    F=fun(User_Client) ->
+		      eadc_utils:redirect_to(User_Client, Url),
+		      io:format("~p\n", [{User_Client#client.nick, Url}])
 	      end,
-	    lists:foreach(F, AllPids);
+	    lists:foreach(F, eadc_client:client_all());
 	Command when (Command=="addtorole") or (Command=="delfromrole") ->
-            case eadc_user:access('change permission') of
+            case eadc_user:access(Account,'change permission') of
                 true ->  ok;
                 false -> throw({error,"You don't have permission."})
             end,
@@ -411,9 +409,9 @@ Roles:
 		_ ->
 		    mnesia:dirty_write(Record)
 	    end,
-	    eadc_utils:info_to_pid(self(), "OK");
+	    eadc_utils:info_to_client(Client, "OK");
 	Command when (Command=="addrole") or (Command=="delrole") ->
-            case eadc_user:access('change permission') of
+            case eadc_user:access(Account,'change permission') of
                 true ->  ok;
                 false -> throw({error,"You don't have permission."})
             end,
@@ -436,9 +434,9 @@ Roles:
 		    {"delrole",false}-> throw({error, "Account doesn't have this role"})
 		end,
 	    eadc_utils:account_write(Acc#account{roles=NewRoles}),
-	    eadc_utils:info_to_pid(self(), "OK");
+	    eadc_utils:info_to_client(Client, "OK");
 	_ ->
-	    eadc_utils:info_to_pid(self(), "Unknown command '"++Command++"'")
+	    eadc_utils:info_to_client(Client, "Unknown command '"++Command++"'")
     end.
 
 
@@ -447,34 +445,33 @@ Roles:
 %% Utils
 %%%%%
 
-drop(UserName, OPName, Reason) ->
+drop(Client,UserName, OPName, Reason) ->
     try
 	[User_Client]=eadc_user:client_find(#client{nick=UserName, _='_'}),
-	Pid_to_kill=User_Client#client.pid,
 	eadc_utils:broadcast({info, UserName++" dropped by "++OPName++". Reason: "++Reason}),
-	gen_fsm:send_event(Pid_to_kill, {kill, "Dropped"})
+	eadc_client:logoff(User_Client, "Dropped")
     catch
 	error:{badmatch,[]} ->
-	    eadc_utils:info_to_pid(self(), "User not found.")
+	    eadc_utils:info_to_client(Client, "User not found.")
     end.
 
-ban(UserName, OPName, Reason) ->
-    ban(UserName, OPName, 5, Reason).
+ban(Me,UserName, OPName, Reason) ->
+    ban(Me,UserName, OPName, 5, Reason).
 
-ban(UserName, OPName, Time, Reason) ->
+ban(Me,UserName, OPName, Time, Reason) ->
     Client=
 	case eadc_user:client_find(#client{nick=UserName, _='_'}) of
 	    [] -> throw({error, "User '"++UserName++"' not found."});
 	    [Client_]  -> Client_
 	end,
     IP=Client#client.addr,
-    ban(UserName, OPName, IP, Time, Reason).
+    ban(Me,UserName, OPName, IP, Time, Reason).
 
-ban(UserName, OPName, IP, Time, Reason) when is_integer(Time) ->
+ban(Me,UserName, OPName, IP, Time, Reason) when is_integer(Time) ->
     Ban=#ban{nick=UserName, ip=IP, time=eadc_utils:get_unix_timestamp(now())+Time*60,
 	     op=OPName, reason=Reason},
     ok=mnesia:dirty_write(Ban),
-    eadc_utils:info_to_pid(self(), "User '"++UserName++"' banned").
+    eadc_utils:info_to_client(Me, "User '"++UserName++"' banned").
 
 
 %% @spec get_field(Args::list(), Number_of_Fields::integer()) -> List | []

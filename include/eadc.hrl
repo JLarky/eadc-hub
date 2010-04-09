@@ -13,6 +13,13 @@
 				       end
 				   end).
 
+-record(connect,{
+	  sender,    % sender record
+	  statename, % ADC state name
+	  adcsid,    % ADC SID
+	  pre_client
+	  }).
+
 -record(state, {
 	  states,
 	  socket,    % client socket

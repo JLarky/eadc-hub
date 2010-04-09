@@ -1,15 +1,16 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([quote/1, unquote/1,s2a/1, a2s/1]).
+-export([quote/1, unquote/1,s2a/1, a2s/1, thing_to_string/1]).
 -export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
 -export([code_reload/1, make_script/0, make_tar/1]).
--export([parse_inf/1, deparse_inf/2, get_required_field/3, get_val/2, get_val/3, set_val/3]).
+-export([parse_inf/1, deparse_inf/2, get_required_field/3, get_nick_field/1,get_cid_field/2,
+	 get_val/2, get_val/3, set_val/3]).
 
 -export([broadcast/1, send_to_pids/2, send_to_pid/2, error_to_pid/2, info_to_pid/2,
-	 redirect_to/3]).
+	 redirect_to/2]).
 
 -export([send_to_senders/2,send_to_sender/2,error_to_sender/2, info_to_sender/2,
 	 send_to_clients/2,send_to_client/2,error_to_client/2, info_to_client/2]).
@@ -61,6 +62,9 @@ unquote(String) ->
 					    {Char, lists:append(Acc,[Prev])}
 				    end end, {[],[]}, String),
     lists:append(U_String, [Buf]).
+
+thing_to_string(Thing) ->
+    lists:flatten(io_lib:format("~p",[Thing])).
 
 random(Max) ->
     {A,B,C}=time(),
@@ -298,11 +302,11 @@ send_to_pid(Unknown1, Unknown2) ->
 %% @spec broadcast(Argument::term()) -> ok
 %% Argument = {string, String::string} | fun()
 broadcast({string,String}) when is_list(String) -> 
-    broadcast(fun(Client) -> send_to_pid(Client, String) end);
+    broadcast(fun(Client) -> send_to_sender(Client, String) end);
 broadcast({info,String}) when is_list(String) -> 
-    broadcast(fun(Client) -> info_to_pid(Client, String) end);
+    broadcast(fun(Client) -> info_to_sender(Client, String) end);
 broadcast(F) when is_function(F) ->
-    lists:foreach(F, eadc_client_fsm:all_pids()).
+    lists:foreach(F, eadc_client:all_senders()).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Messaging functions
@@ -339,15 +343,10 @@ info_to_pid(Pid, Message) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-redirect_to(Pid, Sid, Hub) ->
+redirect_to(Client, Hub) ->
     R_msg="You are redirected to "++Hub,
-    eadc_utils:info_to_pid(Pid, R_msg),
-    SID= if
-	     is_integer(Sid) -> base32(Sid);
-	     is_list(Sid) -> Sid
-	 end,
-    eadc_utils:send_to_pid(Pid, {args, ["IQUI", SID, "RD"++Hub, "MS"++R_msg]}),
-    gen_fsm:send_event(Pid, kill_yourself).
+    SID=sid_to_s(Client#client.sid),
+    eadc_client:logoff(Client,{string, a2s(["IQUI", SID, "RD"++Hub, "MS"++R_msg])}).
 
 get_required_field(Key, PInf, Client) ->
     case (catch lists:keysearch(Key, 1, PInf)) of
@@ -357,6 +356,28 @@ get_required_field(Key, PInf, Client) ->
 	    ?DEBUG(error, "~w not fount required_field ~w: ~w", [self(), Key, Not_found_or_error]),
 	    error_to_client(Client,lists:concat(["Required field ", Key, " not found"])),
 	    throw({stop,Client})
+    end.
+
+get_nick_field(P_Inf) ->
+    case eadc_utils:get_val('NI', "", P_Inf) of
+	"" -> "not_set:"++base32_encode(random_string(5));
+	N -> N
+    end.
+
+get_cid_field(P_Inf,#client{nick=Nick}=Client) ->
+    PID=get_required_field('PD', P_Inf, Client),
+    Cid_f=get_required_field('ID', P_Inf, Client),
+    Cid_u=eadc_client:get_uniq_cid(Cid_f),
+    Cid_p=(catch eadc_utils:base32_encode(tiger:hash(eadc_utils:base32_decode(PID)))),
+    case Cid_p==Cid_u of
+	true ->
+	    Cid_u;
+	false ->
+	    _Msg=lists:concat(["User '", Nick, "' has wrong CID (",Cid_f,"). Be aware"]),
+	    %%eadc_utils:broadcast({info, _Msg}),
+	    eadc_utils:info_to_client(Client,"Your CID isn't corresponding to PID. "
+				      "You are cheater."),
+	    eadc_client:get_uniq_cid("NOTSET"++Cid_u)%% user can't take CID with incorrect PID
     end.
 
 
@@ -435,9 +456,9 @@ account_get_login(Nick, Cid) ->
     A=(catch mnesia:transaction(F)),
     case A of
 	{atomic, [Log]} ->
-	    {login, Log};
+	    Log;
 	_ ->
-	    false
+	    undefined
     end.
 
 
