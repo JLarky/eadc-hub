@@ -1,7 +1,7 @@
 -module(eadc_utils).
 -author('jlarky@gmail.com').
 
--export([quote/1, unquote/1,s2a/1, a2s/1, thing_to_string/1]).
+-export([quote/1, unquote/1,s2a/1, a2s/1, thing_to_string/1,format/2]).
 -export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
@@ -65,6 +65,9 @@ unquote(String) ->
 
 thing_to_string(Thing) ->
     lists:flatten(io_lib:format("~p",[Thing])).
+
+format(Format, Thing) ->
+    lists:flatten(io_lib:format(Format,Thing)).
 
 random(Max) ->
     {A,B,C}=time(),
