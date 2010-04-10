@@ -26,12 +26,14 @@ terminate() ->
 
 
 chat_msg(Args) ->
-    ?GET_VAL(msg, Msg), ?GET_VAL(sid, Sid),
-    ?GET_VAL(pids, Pids), ?GET_VAL(nick, Nick),
-    case Pids of 
+    Senders=eadc_utils:get_val(senders, Args),    
+    case Senders of 
 	[] ->
-	    command_or_some_thing;
+	    command_or_something;
 	_Else ->
+	    Client=eadc_utils:get_val(client, Args),
+	    Msg=eadc_utils:get_val(msg, Args),
+	    Nick=Client#client.nick,Sid=Client#client.sid,
 	    New_Msg=[{{date(),time()}, Sid, eadc_utils:unquote(Msg), Nick}],
 	    case eadc_utils:get_option(ten_lines, tenlines, []) of
 		[_|Tail]=Msgs ->
@@ -49,11 +51,11 @@ chat_msg(Args) ->
     Args.
 
 user_login(Args) ->
-    ?GET_VAL(pid, Pid),
-    ?DEBUG(debug, "~w: user_login ~w", [?MODULE, Pid]),
+    Client=eadc_utils:get_val(client, Args),
+    ?DEBUG(debug, "~w: user_login ~w", [?MODULE, Client]),
 
     {ok,Ten_lines}=(catch ten_lines()),
-    eadc_utils:info_to_pid(self(), lists:concat([Ten_lines])),
+    eadc_utils:info_to_client(Client, lists:concat([Ten_lines])),
     Args.
 
 
