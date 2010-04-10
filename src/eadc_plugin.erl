@@ -18,22 +18,24 @@
 %%%------------------------------------------------------------------------
 
 hook(Hook, Args) ->
-    F=fun(Plugin, Acc_Args) ->
-	      case (catch Plugin:Hook(Acc_Args)) of
-		  {'EXIT',{undef,[{Plugin, Hook, _}|_]}} ->
-		      Acc_Args; %% don't change pids and data
-		  {'EXIT', Error} ->
-		      Format="Error in plugin ~s, hook ~s - ~p\n\nPlease report to admin.",
-		      Msg=lists:flatten(io_lib:format(Format,[Plugin, Hook, Error])),
-		      eadc_utils:info_to_pid(self(), Msg),
-		      ?DEBUG(error, Msg, []),
-		      Acc_Args; %% don't change pids and data
-		  New_Args ->
-		      ?DEBUG(debug, "~s:~s\n~w\n", [Plugin, Hook, New_Args]),
-		      New_Args
-	      end
-      end,    
+    F=fun(P,A) -> hook(Hook,P,A) end,
     lists:foldl(F, Args, get_plugins()).
+
+hook(Hook, Plugin, Args) ->
+    case (catch Plugin:Hook(Args)) of
+	{'EXIT',{undef,[{Plugin, Hook, _}|_]}} ->
+	    Args; %% don't change pids and data
+	{'EXIT', Error} ->
+	    Format="Error in plugin ~s, hook ~s(~p)\n~p\nPlease report to admin.",
+	    Msg=lists:flatten(io_lib:format(Format,[Plugin, Hook, Args, Error])),
+	    ?DEBUG(error, Msg, []),
+	    Client=eadc_utils:get_val(client,Args),
+	    catch eadc_utils:info_to_client(Client, Msg),
+	    Args; %% don't change pids and data
+	New_Args ->
+	    ?DEBUG(debug, "~s:~s\n~w\n", [Plugin, Hook, New_Args]),
+	    New_Args
+    end.
 
 %% @spec set_plugins() -> PluginList
 %% PluginList = [Plugin_module]

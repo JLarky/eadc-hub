@@ -10,11 +10,15 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--record(state, {
-                listener,       % Listening socket
-                acceptor,       % Asynchronous acceptor's internal reference
-                module          % FSM handling module
-               }).
+-record(lstate, {
+	  client_started,
+	  listeners,
+	  sockets,
+	  client,         % Client
+	  module          % FSM handling module
+	 }).
+
+-include("eadc.hrl").
 
 %%--------------------------------------------------------------------
 %% @spec (Port::integer(), Module) -> {ok, Pid} | {error, Reason}
@@ -41,18 +45,25 @@ start_link(Port, Module) when is_integer(Port), is_atom(Module) ->
 %%----------------------------------------------------------------------
 init([Port, Module]) ->
     process_flag(trap_exit, true),
-    Opts = [binary, {packet, 2}, {reuseaddr, true},
-            {keepalive, true}, {backlog, 30}, {active, false}],
-    case gen_tcp:listen(Port, Opts) of
-    {ok, Listen_socket} ->
-        %%Create first accepting process
-        {ok, Ref} = prim_inet:async_accept(Listen_socket, -1),
-        {ok, #state{listener = Listen_socket,
-                    acceptor = Ref,
-                    module   = Module}};
-    {error, Reason} ->
-        {stop, Reason}
+    io:format("~p\n",[{self()}]),
+    {ok,Pid}=sockroute:start(self()),
+    register(listen_sockroute,Pid),
+    Options=[list, {packet, line},{active, false}],
+    case sockroute:listen(Pid,{Port,Options}) of
+	{ok,Socket} ->
+	    {ok, #lstate{client_started=false,
+			listeners = [Pid],
+			sockets   = [Socket],
+			module    = Module}};
+	Err ->
+	    'oh shi~',
+	    io:format("Fatal error: ~p\n",[Err]),
+	    halt()
     end.
+
+%%    Opts = [binary, {packet, 2}, {reuseaddr, true},
+%%            {keepalive, true}, {backlog, 30}, {active, false}],
+
 
 %%-------------------------------------------------------------------------
 %% @spec (Request, From, State) -> {reply, Reply, State}          |
@@ -78,7 +89,12 @@ handle_call(Request, _From, State) ->
 %% @end
 %% @private
 %%-------------------------------------------------------------------------
+handle_cast({sr,#sender{pid=Pid}=Sender,Msg}, #lstate{listeners=Pids}=State) ->
+    true=lists:member(Pid,Pids),
+    NewState=sockroute(Sender,Msg,State),
+    {noreply,NewState};
 handle_cast(_Msg, State) ->
+    io:format("~p\n",[_Msg]),
     {noreply, State}.
 
 %%-------------------------------------------------------------------------
@@ -91,39 +107,21 @@ handle_cast(_Msg, State) ->
 %% @end
 %% @private
 %%-------------------------------------------------------------------------
-handle_info({inet_async, ListSock, Ref, {ok, CliSocket}},
-            #state{listener=ListSock, acceptor=Ref, module=Module} = State) ->
-    try
-        case set_sockopt(ListSock, CliSocket) of
-        ok              -> ok;
-        {error, Reason} -> exit({set_sockopt, Reason})
-        end,
-
-        %% New client connected - spawn a new process using the simple_one_for_one
-        %% supervisor.
-        {ok, Pid} = Module:start_client(),
-        gen_tcp:controlling_process(CliSocket, Pid),
-        %% Instruct the new FSM that it owns the socket.
-        Module:set_socket(Pid, CliSocket),
-
-        %% Signal the network driver that we are ready to accept another connection
-        case prim_inet:async_accept(ListSock, -1) of
-        {ok,    NewRef} -> ok;
-        {error, NewRef} -> exit({async_accept, inet:format_error(NewRef)})
-        end,
-
-        {noreply, State#state{acceptor=NewRef}}
-    catch exit:Why ->
-        error_logger:error_msg("Error in async accept: ~p.\n", [Why]),
-        {stop, Why, State}
+handle_info({'EXIT',Client,Ded}, #lstate{client=Client}=State) ->
+    error_logger:error_msg("Client process (~p) was killed (or something) ~p",
+			   [Client,Ded]),
+    %% wait for respawn
+    NClient=wait_client(_Time=10000),
+    case is_process_alive(NClient) of
+	true ->
+	    link(NClient),
+	    {noreply, State#lstate{client=NClient,client_started=true}};
+	Error ->
+	    error_logger:error_msg("Error (~p) with starting client ~p\n",[Error,NClient]),
+	    {stop, {error, 'client not started'}, State}
     end;
-
-handle_info({inet_async, ListSock, Ref, Error}, #state{listener=ListSock, acceptor=Ref} = 
-State) ->
-    error_logger:error_msg("Error in socket acceptor: ~p.\n", [Error]),
-    {stop, Error, State};
-
 handle_info(_Info, State) ->
+    ?DEBUG(error, "Unhabded info in eadc_listener: ~p\n",[_Info]),
     {noreply, State}.
 
 %%-------------------------------------------------------------------------
@@ -135,7 +133,7 @@ handle_info(_Info, State) ->
 %% @private
 %%-------------------------------------------------------------------------
 terminate(_Reason, State) ->
-    gen_tcp:close(State#state.listener),
+    lists:foreach(fun(P)->sockroute:stop(P)end,State#lstate.listeners),
     ok.
 
 %%-------------------------------------------------------------------------
@@ -151,17 +149,39 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%------------------------------------------------------------------------
 
-%% Taken from prim_inet.  We are merely copying some socket options from the
-%% listening socket to the new client socket.
-set_sockopt(ListSock, CliSocket) ->
-    true = inet_db:register_socket(CliSocket, inet_tcp),
-    case prim_inet:getopts(ListSock, [active, nodelay, keepalive, delay_send, priority, 
-tos]) of
-    {ok, Opts} ->
-        case prim_inet:setopts(CliSocket, Opts) of
-        ok    -> ok;
-        Error -> gen_tcp:close(CliSocket), Error
-        end;
-    Error ->
-        gen_tcp:close(CliSocket), Error
-    end.
+sockroute(Sender,accept,#lstate{client_started=true,client=Client}=State) ->
+    gen_server:cast(Client,{accept,Sender}),
+    State;
+sockroute(Sender,accept,State) ->
+    OK=supervisor:start_child(eadc_client_sup,[]),
+    error_logger:info_msg("eadc_cl started, ~p\n",[OK]),
+    case OK of
+	{ok, Client} ->
+	    link(Client),
+	    gen_server:cast(Client,{accept,Sender}),
+	    State#lstate{client=Client,client_started=true};
+	Error ->
+	    error_logger:error_msg("Error with starting client ~p\n",[Error]),
+	    State#lstate{client=error,client_started=false}
+    end;
+sockroute(Sender,{received,Data}, #lstate{client=Client}=State) ->
+    gen_server:cast(Client,{received, Sender, Data}),
+    State;
+sockroute(Sender,closed, #lstate{client=Client}=State) ->
+    gen_server:cast(Client,{closed, Sender}),
+    State;
+sockroute(Sender, Msg,State) ->
+    io:format("other ~p\n",[{Sender,Msg,State}]),
+    State.
+
+wait_client(Timeout) when is_integer(Timeout) andalso (Timeout >= 0) ->
+    Pid=whereis(eadc_client),
+    case catch is_process_alive(Pid) of
+	true ->
+	    Pid;
+	_ ->
+	    timer:sleep(100),
+	    wait_client(Timeout-100)
+    end;
+wait_client(_) ->
+    timeout.

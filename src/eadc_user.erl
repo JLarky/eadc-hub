@@ -11,7 +11,7 @@
 
 %% API
 -export([init/0]).
--export([access/1,access/2]).
+-export([access/2]).
 -export([get_client_account/1, client_find/1]).
 -export([add_permission/2,del_permission/2]).
 
@@ -38,19 +38,9 @@ init() ->
 				      {disc_copies, [node()]}], [{run, Run}]),
     ok.
 
-%% @spec access(atom()) -> true | false
-%% @doc returns true if current user have rights for 'permission'. 
-%% returns true for users having root role for any 'permission'.
-access(Permission) ->
-    Account=case get_client_account(self()) of
-		Acc when is_record(Acc, account) ->
-		    Acc;
-		_ ->
-		    #account{roles=[anonymous]}
-	    end,
-    access(Permission, Account).
-
-access(Permission, Account) ->
+access(Account, Permission) when is_record(Account,account) ->
+    access(Permission, Account);
+access(Permission, Account) when is_record(Account,account) ->
     case lists:member(root, Account#account.roles) of
 	true -> %% access allways true for roots
 	    true;

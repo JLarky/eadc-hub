@@ -19,28 +19,30 @@ init() -> ok.
 terminate() -> ok.
 
 user_login(Args) ->
-    eadc_utils:send_to_pid(self(), {args, ["ICMD", "IP",
-					   "TTBMSG\s%[mySID]\s.ip\\s%[userNI]\n", "CT15"]}),
+    Client=eadc_utils:get_val(client, Args),
+    eadc_utils:send_to_client(Client, {args, ["ICMD", "IP",
+					      "TTBMSG\s%[mySID]\s.ip\\s%[userNI]\n", "CT15"]}),
     Args.
 
 chat_msg(Args) ->
+    Client=eadc_utils:get_val(client, Args),
     Msg=eadc_utils:get_val(msg,Args),
     case Msg of
 	[$., $i, $p, $\  | Tail] ->
 	    try
-		[Client|_]=eadc_user:client_find(#client{nick=Tail,_='_'}),
-		Addr=Client#client.addr,
+		[Cl|_]=eadc_user:client_find(#client{nick=Tail,_='_'}),
+		Addr=Cl#client.addr,
 		Place=whois(Addr),
 		Place_m =  case Place of
 			       inet -> "интернетах. Осторожно! трафик!";
 			       _    -> f("~w общаге.",[Place])
 			   end,
-		eadc_utils:info_to_pid(self(), f("Пользователь ~s находится в ~s",
+		eadc_utils:info_to_client(Client, f("Пользователь ~s находится в ~s",
 						 [Tail, Place_m]))
 	    catch error:Error ->
-		    eadc_utils:info_to_pid(self(), io_lib:format("Error: ~p\n",[Error]))
+		    eadc_utils:info_to_client(Client, eadc_utils:format("2Error: ~p\n",[Error]))
 	    end,
-	    eadc_utils:set_val(pids, [], Args);
+	    eadc_utils:set_val(senders, [], Args);
 	_ ->
 	    Args
     end.
@@ -49,13 +51,11 @@ rcm(Args) ->
     ctm(eadc_utils:set_val(rcm, true,Args)).
  
 ctm(Args) ->
+    Client=eadc_utils:get_val(client, Args),
     try
-	[Pid]=eadc_utils:get_val(pids, Args),
-	%%State_f=eadc_utils:get_val(state, Args),
-	Client=eadc_utils:get_val(client, Args),
 	Nick_f=Client#client.nick,
-	
-	[Client_t]=eadc_user:client_find(#client{pid=Pid, _='_'}),
+	TarSid=eadc_utils:unbase32(eadc_utils:get_val(tar_sid, Args)),
+	Client_t=eadc_client:client_get(TarSid),
 	Nick_t=Client_t#client.nick,
 	_Direction=lists:concat([whois(Client_t#client.addr), "\\sи\\s", 
 				 whois(Client#client.addr)]),
@@ -67,15 +67,15 @@ ctm(Args) ->
 		?DEBUG(debug,"~p\n",[PA]),
 		Direction=lists:concat([whois(Client#client.addr), " и ",
 					whois(Client_t#client.addr)]),
-		eadc_utils:info_to_pid(self(), "Соединенние между "++Nick_f++" и "++Nick_t++
-				       " ("++Direction++") не состоится. Ваш Хаб."),
-		eadc_utils:set_val(pids, [], Args);
+		eadc_utils:info_to_client(Client, "Соединенние между "++Nick_f++" и "++Nick_t++
+					  " ("++Direction++") не состоится. Ваш Хаб."),
+		eadc_utils:set_val(senders, [], Args);
 	    _ ->
 		Args
 	end
 
     catch error:Error ->
-	    eadc_utils:info_to_pid(self(), io_lib:format("Error: ~p\n",[Error])),
+	    eadc_utils:info_to_client(Client, eadc_utils:format("1Error: ~p\n",[Error])),
 	    Args
     end.
  
