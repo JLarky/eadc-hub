@@ -197,8 +197,8 @@ handle_command(H, Cmd, Tail, Data, Connect) ->
 	{setconnect, NewConnect} ->
 	    connect_set(NewConnect),
 	    ok;
-	{stop, Client} ->
-	    logoff(Client, "o0"),
+	{stop, Client, Msg} ->
+	    logoff(Client, Msg),
 	    ok;
 	Other ->
 	    error_logger:format("Other ~p: ~p", [{H, Cmd, Tail, Data, Connect},Other])
@@ -623,6 +623,11 @@ user_login(Client) ->
     Hooked_Args=eadc_plugin:hook(user_login, [{client, Client}]),
     {client, Hooked_Client}={client,get_val(client, Hooked_Args)},
     {data, Data_to_send}={data,Hooked_Client#client.inf},
+    {logoff, Logoff}={logoff,eadc_utils:get_val(logoff, Hooked_Args)},
+    case is_list(Logoff) of
+	true -> return({stop, Client, Logoff});
+	false -> ok
+    end,
     case is_record(Hooked_Client, client) of
 	true ->
 	    lists:foreach(fun(#client{inf=CInf}) ->
@@ -635,7 +640,7 @@ user_login(Client) ->
 	    eadc_utils:send_to_senders(Senders_to_inform,Data_to_send),
 	    ok;
 	false -> %% logoff
-	    {logoff,thing_to_string(Hooked_Client)}
+	    {stop, Client, "Wrong Client: "++thing_to_string({Hooked_Client})}
     end.
 
 check_sid(Connect,Sid,StateName) ->

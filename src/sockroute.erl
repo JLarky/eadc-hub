@@ -160,7 +160,13 @@ handle_call({listen, Port}, _From, #state{protocol=tcp}=State)->
 %%% API
 %% see send/3
 handle_call({send, Socket, Thing}, _From, #state{protocol=tcp}=State) ->
-    Reply=(catch gen_tcp:send(Socket, Thing)),
+    Reply=
+	case (catch gen_tcp:send(Socket, Thing)) of
+	    {error,einval} -> %% may be because of utf8?
+		(catch gen_tcp:send(Socket, unicode:characters_to_binary(Thing)));
+	    Other ->
+		Other
+	end,
     case (random:uniform(1000)==1) of % one of N cases
 	true ->
 	    %%garbage_collect();

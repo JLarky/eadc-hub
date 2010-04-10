@@ -34,26 +34,28 @@ user_login(Args) ->
 	Login when is_list(Login) ->
 	    Args;
 	_ ->
-	    eadc_utils:info_to_pid(self(), "Not invited!"),
-	    eadc_utils:set_val(client, Client#client{pid=notinvited}, Args)
+	    eadc_utils:info_to_client(Client, "Not invited!"),
+	    eadc_utils:set_val(logoff, "Not invited!", Args)
     end.
 
 chat_msg(Args) ->
-    case eadc_user:access('chat chat') of
+    Client=eadc_utils:get_val(client,Args),
+    case eadc_user:access(Client, 'main chat') of
 	false ->
-	    eadc_utils:info_to_pid(self(), "You don't have permission"),
-	    eadc_utils:set_val(pids, [], Args);
+	    eadc_utils:info_to_client(Client, "You don't have permission"),
+	    eadc_utils:set_val(senders, [], Args);
 	true ->
-	    A=eadc_utils:get_val(pids, [], Args),
+	    A=eadc_utils:get_val(senders, [], Args),
 	    io:format("~p\n", [A]),
 	    Args
     end.
 
 priv_msg(Args) ->
-    case eadc_user:access('private chat') of
+    Client=eadc_utils:get_val(client,Args),
+    case eadc_user:access(Client, 'private chat') of
 	false ->
-	    eadc_utils:info_to_pid(self(), "You don't have permission"),
-	    eadc_utils:set_val(pids, [], Args);
+	    eadc_utils:info_to_client(Client, "You don't have permission"),
+	    eadc_utils:set_val(senders, [], Args);
 	true ->
 	    Args
     end.
@@ -62,9 +64,10 @@ rcm(Args) ->
     ctm(Args).
 
 ctm(Args) ->
-    case eadc_user:access('main chat') of
+    Client=eadc_utils:get_val(client,Args),
+    case eadc_user:access(Client, 'download') of
 	true ->
 	    Args;
 	false ->
-	    eadc_utils:set_val(pids, [], Args)
+	    eadc_utils:set_val(senders, [], Args)
     end.
