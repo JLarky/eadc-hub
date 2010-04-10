@@ -128,12 +128,11 @@ do_command([Command|Args], _State, Client) ->
 User's commands:
  !help - shows this help
  !regme <password> - registers new user with password <password>
+ !passwd <password> - changes current user's password to <password>
  !userlist - shows all users with hidden passwords
 
 Admin's commands:
  !regnewuser <username> <pass> - register user with password <pass>
- !regclass <username> <class> - changes user's class to <class>
- !userlist - shows all users with their passwords
  !topic <topic> - sets hub's topic
  !getconfig - shows all set options
  !setconfig <key> <val> - sets hub's option 
@@ -190,13 +189,30 @@ Roles:
 		UserLogin ->
 		    throw({error,"You are allredy registered as '"++UserLogin++"'"})
 	    end,
-	    case eadc_user:access(Account,'self registration') or (Roles==[user,root]) of
+	    Access=case is_record(Account,account) of
+		       true -> eadc_user:access(Account,'self registration');
+		       false -> eadc_user:access('self registration') %% for anonymous
+		   end,
+	    case Access or (Roles==[user,root]) of
 		true ->
 		    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,
 								   pass=Pass,roles=Roles}),
 		    eadc_utils:info_to_client(Client, "User '"++UserName++"' was registered");
 		false ->
 		    eadc_utils:error_to_client(Client, "You don't have permission.")
+	    end;
+	"passwd" ->
+	    case get_fields(Args, 1) of
+		[Pass] -> ok;
+		Pass   -> throw({error, "usage: !passwd <pass>"})
+	    end,
+	    
+	    case is_record(Account,account) of
+		false -> 
+		    eadc_utils:error_to_client(Client, "You are not registred");
+		true ->
+		    {atomic, ok}=eadc_utils:account_write(Account#account{pass=Pass}),
+		    eadc_utils:info_to_client(Client, "Password was successfully changed")
 	    end;
 	"drop" ->
 	    case eadc_user:access(Account,'drop any') of
@@ -241,14 +257,8 @@ Roles:
 		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"userlist" ->
-	    List=eadc_utils:account_all(),
-	    case eadc_user:access(Account,'view pass') of
-		true ->
-		    New_List=List;
-		false ->
-		    New_List=lists:map(fun(A) -> A#account{pass="***"} end, List)
-	    end,
-	    eadc_utils:info_to_client(Client, lists:flatten(io_lib:format("Users:\n~p", [New_List])));
+	    List=lists:map(fun(A) -> A#account{pass="***"} end, eadc_utils:account_all()),
+	    eadc_utils:info_to_client(Client, eadc_utils:format("Users:\n~p", [List]));
 	"topic" ->
 	    case eadc_user:access(Account,'change topic') of
 		true ->
@@ -425,7 +435,7 @@ Roles:
 		      true ->
 			  Acc#account.roles;
 		      _ ->
-			  throw({error, "Account not found. Name of account is case-sensative."})
+			  throw({error, "Account not found. Name of account is case-sensetive."})
 		  end, NewRoles=
 		case {Command,lists:member(list_to_atom(Role),Roles)} of
 		    {"addrole",false}-> [list_to_atom(Role)|Roles];

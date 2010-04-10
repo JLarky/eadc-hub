@@ -11,7 +11,7 @@
 
 %% API
 -export([init/0]).
--export([access/2]).
+-export([access/1,access/2]).
 -export([get_client_account/1, client_find/1]).
 -export([add_permission/2,del_permission/2]).
 
@@ -45,13 +45,18 @@ access(Permission, Account) when is_record(Account,account) ->
 	true -> %% access allways true for roots
 	    true;
 	false ->
-	    Roles_allowed=case mnesia:dirty_read(permission, Permission) of
-			      [Perm] -> Perm#permission.roles;
-			      _ -> []
-			  end,
-	    Roles_taken=Account#account.roles,
-	    lists:any(fun(Role_a) -> lists:member(Role_a,Roles_taken) end, Roles_allowed)
+	    role_access(Account#account.roles,Permission)
     end.
+access(Permission) ->
+    role_access([anonymous], Permission).
+
+role_access(Roles, Permission) ->
+    Roles_allowed=case mnesia:dirty_read(permission, Permission) of
+		      [Perm] ->
+			  Perm#permission.roles;
+		      _ -> []
+		  end,
+    lists:any(fun(Role_a) -> lists:member(Role_a,Roles) end, Roles_allowed).
 
 %%--------------------------------------------------------------------
 %% Function: get_client_account(Pid)
