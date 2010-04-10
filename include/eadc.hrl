@@ -14,9 +14,10 @@
 				   end).
 
 -record(connect,{
-	  sender,    % sender record
-	  statename, % ADC state name
-	  adcsid,    % ADC SID
+	  sender,      % sender record
+	  buff=[],     % buffer for unfinished commands
+	  statename,   % ADC state name
+	  adcsid,      % ADC SID
 	  pre_client
 	  }).
 

@@ -107,8 +107,21 @@ handle_cast(_Msg, State) ->
 %% @end
 %% @private
 %%-------------------------------------------------------------------------
+handle_info({'EXIT',Client,Ded}, #lstate{client=Client}=State) ->
+    error_logger:error_msg("Client process (~p) was killed (or something) ~p",
+			   [Client,Ded]),
+    %% wait for respawn
+    NClient=wait_client(_Time=10000),
+    case is_process_alive(NClient) of
+	true ->
+	    link(NClient),
+	    {noreply, State#lstate{client=NClient,client_started=true}};
+	Error ->
+	    error_logger:error_msg("Error (~p) with starting client ~p\n",[Error,NClient]),
+	    {stop, {error, 'client not started'}, State}
+    end;
 handle_info(_Info, State) ->
-    errlor_logger:error_msg(_Info),
+    ?DEBUG(error, "Unhabded info in eadc_listener: ~p\n",[_Info]),
     {noreply, State}.
 
 %%-------------------------------------------------------------------------
@@ -144,6 +157,7 @@ sockroute(Sender,accept,State) ->
     error_logger:info_msg("eadc_cl started, ~p\n",[OK]),
     case OK of
 	{ok, Client} ->
+	    link(Client),
 	    gen_server:cast(Client,{accept,Sender}),
 	    State#lstate{client=Client,client_started=true};
 	Error ->
@@ -160,3 +174,14 @@ sockroute(Sender, Msg,State) ->
     io:format("other ~p\n",[{Sender,Msg,State}]),
     State.
 
+wait_client(Timeout) when is_integer(Timeout) andalso (Timeout >= 0) ->
+    Pid=whereis(eadc_client),
+    case catch is_process_alive(Pid) of
+	true ->
+	    Pid;
+	_ ->
+	    timer:sleep(100),
+	    wait_client(Timeout-100)
+    end;
+wait_client(_) ->
+    timeout.

@@ -1,4 +1,3 @@
-
 %% @doc Module eadc_app starts all required supervisors and sub-applications like Tiger Hash.
 %% @end
 -module(eadc_app).
@@ -33,10 +32,6 @@ start(_Type, _Args) ->
 				   record_info(fields, option)},
 				  {disc_copies, [node()]}], []),
 
-    eadc_app:start_table(client, [{attributes,
-			      record_info(fields, client)},
-			     {disc_copies, [node()]}], [{clear, true}]),
-    
     eadc_user:init(),
 
     error_logger:logfile({open, 'error.log'}),error_logger:tty(false),
@@ -82,6 +77,14 @@ init({eadc_sup, Port, Module}) ->
 		 worker,                                  % Type     = worker | supervisor
 		 [eadc_master]                            % Modules  = [Module] | dynamic
 		},
+	     %% Connect state module
+	     {   eadc_connect_state,                      % Id       = internal id
+		 {eadc_connect_state,start_link,[]},      % StartFun = {M, F, A}
+		 temporary,                               % Restart  = permanent | transient | temporary
+		 2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity
+		 worker,                                  % Type     = worker | supervisor
+		 [eadc_connect_state]                     % Modules  = [Module] | dynamic
+		},
 	     %% Client instance supervisor
 	     {   eadc_client_sup,
 		 {supervisor,start_link,[{local, eadc_client_sup}, ?MODULE, [Module]]},
@@ -101,10 +104,10 @@ init([Module]) ->
               % TCP Client
               {   undefined,                               % Id       = internal id
                   {Module,start_link,[]},                  % StartFun = {M, F, A}
-                  temporary,                               % Restart  = permanent | transient | temporary
+                  permanent,                               % Restart  = permanent | transient | temporary
                   2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity
                   worker,                                  % Type     = worker | supervisor
-                  []                                       % Modules  = [Module] | dynamic
+                  [Module]                                 % Modules  = [Module] | dynamic
               }
             ]
         }

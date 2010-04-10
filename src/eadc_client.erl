@@ -23,6 +23,8 @@
 
 -export([get_socket_by_sid/1,all_senders/0,get_uniq_cid/1]).
 
+-export([handle_received/2]).
+
 %%====================================================================
 %% API
 %%====================================================================
@@ -45,8 +47,10 @@ start_link() ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([]) ->
-    catch ets:delete(connect_state),
-    ets:new(connect_state, [named_table,{keypos,2}]),
+    %%eadc_connect_state:start_link(),
+    eadc_app:start_table(client, [{attributes,
+				   record_info(fields, client)},
+				  {disc_copies, [node()]}], [{clear, true}]),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -73,8 +77,15 @@ handle_cast({accept,Sender},State) ->
     connect_set(#connect{sender=Sender,statename=wait_data}),
     {noreply,State};
 handle_cast({received,Sender,Data},State) ->
-    Data_=lists:delete($\n, Data),
-    handle_data(Sender,Data_),
+    case connect_get(Sender) of
+	{hz, HZ} -> 
+	    %% каким-то волшебным образом мы получили данные из сокета,
+	    %% который не прислал accept, лучше нафиг его послать
+	    ?DEBUG(error, "HZ received ~p,~p:\n~p",[{received,Sender,Data},State,HZ]),
+	    catch sockroute:close(Sender);
+	{ok, Connect} ->
+	    handle_received(Connect,Data)
+    end,
     {noreply,State};
 handle_cast({closed,Sender}, State) ->
     case catch connect_get(Sender) of
@@ -113,7 +124,9 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
-    error_logger:info_msg("terminate ~p\n",[_Reason]),
+    error_logger:info_msg("terminate ~p\n",[{_Reason,ets:info(connect_states)}]),
+    Kill=fun(C) -> logoff(C,"Something goes really wrong") end,
+    catch lists:foreach(Kill,connect_all()),
     ok.
 
 %%--------------------------------------------------------------------
@@ -127,16 +140,33 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-handle_data(Sender,"") -> %% keep alive
-    %%gen_tcp:send(Socket,"\n"),
-    sockroute:send(Sender,"\n"),
+handle_received(Connect,Data) ->
+    file:write_file("/tmp/1",lists:reverse(Connect#connect.buff)),
+    file:write_file("/tmp/2",thing_to_string(Data)),
+    handle_received(Data, Connect#connect.buff, Connect).
+
+handle_received([], Buff, #connect{buff=Buff}) ->
+    %% no need to save
     ok;
-handle_data(Sender,Data) ->
+handle_received([], Buff, Connect) ->
+    %% save buffer
+    connect_set(Connect#connect{buff=Buff}),
+    ok;
+handle_received([$\n|Tail], Buff, Connect) ->
+    handle_data(Connect, lists:reverse(Buff)),
+    handle_received(Tail, [], Connect);
+handle_received([H|Tail], Buff, Connect) ->
+    handle_received(Tail, [H|Buff], Connect).
+
+
+handle_data(Connect,"") -> %% keep alive
+    sockroute:send(Connect#connect.sender,"\n");
+handle_data(Connect,Data) ->
     Message=string:tokens(Data, " "),
     case Message of
 	[[Header|Command_name]|Tail] ->
 	    H = [Header],Cmd=Command_name,
-	    case (catch handle_command(H,Cmd,Tail,Data,Sender)) of
+	    case (catch handle_command(H,Cmd,Tail,Data,Connect)) of
 		ok ->
 		    ok;
 		Error ->
@@ -151,32 +181,27 @@ handle_data(Sender,Data) ->
 %% посылаемое сообещение или не посылать его вовсе
 
 %% в итоге: берём хедер, получаем список получаетелей и шлём.
-handle_command(H, Cmd, Tail, Data, Sender) ->
-    case connect_get(Sender) of
-	{hz, HZ} ->
-	    error_logger:format("What did just happend? ~p:~p", [{H,Cmd,Tail,Data,Sender},HZ]);
-	{ok, Connect} ->
-	    StateName=Connect#connect.statename,
-	    case catch handle_command(H, Cmd, Tail, Data, Connect, StateName) of
-		{Senders2send, Data2send} when is_list(Senders2send) ->
-		    error_logger:info_msg("command handled ~p\n",
-					  [{Senders2send, Data2send}]),
-		    case catch eadc_utils:send_to_senders(Senders2send,Data2send) of
-			ok -> ok;
-			Error ->
-			    ?DEBUG(error, "Error in handle command ~p: ~p\n",
-				   [{H, Cmd, Tail, Data, Sender},Error]),
-			    ok
-		    end;
-		{setconnect, NewConnect} ->
-		    connect_set(NewConnect),
-		    ok;
-		{stop, Client} ->
-		    logoff(Client, "o0"),
-		    ok;
-		Other ->
-		    error_logger:format("Other ~p: ~p", [{H, Cmd, Tail, Data, Sender},Other])
-	    end
+handle_command(H, Cmd, Tail, Data, Connect) ->
+    StateName=Connect#connect.statename,
+    case catch handle_command(H, Cmd, Tail, Data, Connect, StateName) of
+	{Senders2send, Data2send} when is_list(Senders2send) ->
+	    error_logger:info_msg("command handled ~p\n",
+				  [{Senders2send, Data2send}]),
+	    case catch eadc_utils:send_to_senders(Senders2send,Data2send) of
+		ok -> ok;
+		Error ->
+		    ?DEBUG(error, "Error in handle command ~p: ~p\n",
+			   [{H, Cmd, Tail, Data, Connect},Error]),
+		    ok
+	    end;
+	{setconnect, NewConnect} ->
+	    connect_set(NewConnect),
+	    ok;
+	{stop, Client} ->
+	    logoff(Client, "o0"),
+	    ok;
+	Other ->
+	    error_logger:format("Other ~p: ~p", [{H, Cmd, Tail, Data, Connect},Other])
     end.
 
 handle_command(H, Cmd, Tail, Data, Connect, StateName) ->
@@ -565,18 +590,16 @@ thing_to_string(Thing) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 connect_get(Sender) ->
-    case catch ets:lookup(connect_state,Sender) of
-	[Connect] ->
-	    {ok, Connect};
-	HZ ->
-	    {hz, HZ}
-    end.
+    gen_server:call(eadc_connect_state, {get, Sender}).
+
+connect_all() ->
+    gen_server:call(eadc_connect_state, {getall}).
 
 connect_set(Connect) ->
-    ets:insert(connect_state,Connect).
+    gen_server:call(eadc_connect_state, {insert, Connect}).
 
 connect_delete(Sender) ->
-    ets:delete(connect_state,Sender).
+    gen_server:call(eadc_connect_state, {delete, Sender}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -633,24 +656,3 @@ check_sid(Connect,Sid,StateName) ->
 	    return({[],"Wrong SID"}) %% deny to futher processing
     end.
 
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-
-asd({tcp, Socket, Bin}, StateName, #state{socket=Socket, buf=Buf} = StateData) ->
-    %% Flow control: enable forwarding of next TCP message
-    inet:setopts(Socket, [{active, once}]),
-    Data = binary_to_list(Bin),
-    String = lists:delete($\n, Data),
-    ?DEBUG(debug, "tcp string '~s'", [String]), 
-    case {Buf, lists:last(Data)} of 
-	{[], 10} -> 
-	    ?MODULE:StateName({data, String}, StateData);
-	{_, 10} ->
-	    ?MODULE:StateName({data, lists:concat([Buf,Data])}, StateData#state{buf=[]});
-	_ -> 
-	    {next_state, StateName, StateData#state{buf=lists:concat([Buf,Data])}}
-    end.
