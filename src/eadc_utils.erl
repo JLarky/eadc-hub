@@ -15,8 +15,6 @@
 -export([send_to_senders/2,send_to_sender/2,error_to_sender/2, info_to_sender/2,
 	 send_to_clients/2,send_to_client/2,error_to_client/2, info_to_client/2]).
 
--export([account_write/1, account_all/0, account_get/1, account_get_login/2]).
-
 -export([get_option/3, set_option/3, get_options/1]).
 
 -export([get_unix_timestamp/1]).
@@ -406,63 +404,6 @@ get_val(Key, Args) ->
 set_val(Key, Val, Args) -> 
     lists:keystore(Key, 1, Args, {Key, Val}).
 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Account functions
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% @type account() = record(account)
-%% @spec account_write(account()) -> {atomic, ok} | {aborted, Reason}
-%% @doc writes account into mnesia table  
-account_write(Account) when is_record(Account, account)->
-    F=fun() ->
-	      mnesia:write(Account)
-      end,
-    mnesia:transaction(F).
-
-%% @spec account_all() -> Accounts | {error, Error}
-%% Accounts = [account()]
-%% @doc returns list of all accounts
-account_all() ->
-    F = fun()->
-		mnesia:match_object(#account{_='_'})
-	end,
-    case (catch mnesia:transaction(F)) of
-	{atomic, List} when is_list(List) ->
-	    List;
-	Error ->
-	    {error, Error}
-    end.
-
-%% @spec account_get(string()) -> Account
-%% Account = account()
-%% @doc returns account record with Login
-account_get(Login) ->
-    F = fun()->
-		mnesia:match_object(#account{login=Login,_='_'})
-	end,
-
-    case (catch mnesia:transaction(F)) of
-	{atomic, [Account]} ->
-	    Account#account{};
-	_ ->
-	    false
-    end.
-
-%% @spec account_get_login(string(), string()) -> {login, Ligin::string()} | false
-%% @doc finds account with this Nick or Cid.
-account_get_login(Nick, Cid) ->
-    MatchHead = #account{cid='$1', nick='$2', _='_', login='$3'},
-    Guard = [{'or',{'==','$2',Nick},{'==','$1',Cid}}], Result = '$3',
-    F = fun() ->
-		mnesia:select(account,[{MatchHead, Guard, [Result]}])
-	end,
-    A=(catch mnesia:transaction(F)),
-    case A of
-	{atomic, [Log]} ->
-	    Log;
-	_ ->
-	    undefined
-    end.
 
 
 get_option(Ns, Key, Default) ->

@@ -269,7 +269,7 @@ client_command(wait_inf,"B","INF",_Senders,Data,Args_) ->
     Inf=inf_update(Data, [lists:concat(["I4",I1,".",I2,".",I3,".",I4]),
 			  "PD","ID"++Cid, "NI"++Nick]),
     
-    Login=eadc_utils:account_get_login(Nick, Cid),
+    Login=eadc_user:account_get_login(Nick, Cid),
     
     New_Client=Client#client{%%sid,sender,sup,addr,other --- already set
 		 pid=self(),cid=Cid,nick=Nick,login=Login,inf=Inf},
@@ -294,7 +294,7 @@ client_command(wait_pass, "H", "PAS", [], _Data, Args) ->
     Random=eadc_utils:get_val(random,Other),
     Tries_left=eadc_utils:get_val(triesleft,Other),
     Login=eadc_utils:get_val(login,Other),
-    Account=eadc_utils:account_get(Login),
+    Account=eadc_user:account_get(Login),
 
     case eadc_utils:get_val(par,Args) of
 	[_Pass] -> Pass=_Pass;

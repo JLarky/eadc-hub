@@ -120,7 +120,7 @@ chat_msg(Args) ->
     end.
 
 do_command([Command|Args], _State, Client) ->
-    Account=eadc_utils:account_get(Client#client.login),
+    Account=eadc_user:account_get(Client#client.login),
     case Command of
 	"help" ->
 	    Hlp="All hub commands:
@@ -160,7 +160,7 @@ Roles:
 		    case get_fields(Args, 2) of
 			[UserName|Pass_] ->
 			    Pass=string:join(Pass_, " "),
-			    Ok=eadc_utils:account_write(#account{login=UserName, nick=UserName,
+			    Ok=eadc_user:account_write(#account{login=UserName, nick=UserName,
 								 pass=Pass, roles=[user]}),
 			    eadc_utils:info_to_client(Client, lists:flatten(io_lib:format("~p",
 										       [Ok])));
@@ -188,13 +188,10 @@ Roles:
 		UserLogin ->
 		    throw({error,"You are allredy registered as '"++UserLogin++"'"})
 	    end,
-	    Access=case is_record(Account,account) of
-		       true -> eadc_user:access(Account,'self registration');
-		       false -> eadc_user:access('self registration') %% for anonymous
-		   end,
+	    Access=eadc_user:access(Account,'self registration'),
 	    case Access or (Roles==[user,root]) of
 		true ->
-		    {atomic, ok}=eadc_utils:account_write(#account{login=UserName, nick=UserName,
+		    {atomic, ok}=eadc_user:account_write(#account{login=UserName, nick=UserName,
 								   pass=Pass,roles=Roles}),
 		    eadc_utils:info_to_client(Client, "User '"++UserName++"' was registered");
 		false ->
@@ -210,7 +207,7 @@ Roles:
 		false -> 
 		    eadc_utils:error_to_client(Client, "You are not registred");
 		true ->
-		    {atomic, ok}=eadc_utils:account_write(Account#account{pass=Pass}),
+		    {atomic, ok}=eadc_user:account_write(Account#account{pass=Pass}),
 		    eadc_utils:info_to_client(Client, "Password was successfully changed")
 	    end;
 	"drop" ->
@@ -256,7 +253,7 @@ Roles:
 		    eadc_utils:info_to_client(Client, "You don't have permission.")
 	    end;
 	"userlist" ->
-	    List=lists:map(fun(A) -> A#account{pass="***"} end, eadc_utils:account_all()),
+	    List=lists:map(fun(A) -> A#account{pass="***"} end, eadc_user:account_all()),
 	    eadc_utils:info_to_client(Client, eadc_utils:format("Users:\n~p", [List]));
 	"topic" ->
 	    case eadc_user:access(Account,'change topic') of
@@ -429,7 +426,7 @@ Roles:
 			     _ -> throw({error, "Error: see help for usage"})
 			 end,
 	    Login=string:join(Login_," "),
-	    Acc=eadc_utils:account_get(Login),
+	    Acc=eadc_user:account_get(Login),
 	    Roles=case is_record(Acc,account) of
 		      true ->
 			  Acc#account.roles;
@@ -442,7 +439,7 @@ Roles:
 		    {"addrole",true} -> throw({error, "Already added"});
 		    {"delrole",false}-> throw({error, "Account doesn't have this role"})
 		end,
-	    eadc_utils:account_write(Acc#account{roles=NewRoles}),
+	    eadc_user:account_write(Acc#account{roles=NewRoles}),
 	    eadc_utils:info_to_client(Client, "OK");
 	_ ->
 	    eadc_utils:info_to_client(Client, "Unknown command '"++Command++"'")
