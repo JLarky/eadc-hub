@@ -52,7 +52,7 @@
 	  pass="",
 	  nick="",
 	  cid="",
-	  roles="",
+	  roles=[anonymous],
 	  info=[]}).
 
 -record(option, {
