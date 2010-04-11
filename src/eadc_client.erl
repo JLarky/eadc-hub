@@ -185,8 +185,7 @@ handle_command(H, Cmd, Tail, Data, Connect) ->
     StateName=Connect#connect.statename,
     case catch handle_command(H, Cmd, Tail, Data, Connect, StateName) of
 	{Senders2send, Data2send} when is_list(Senders2send) ->
-	    error_logger:info_msg("command handled ~p\n",
-				  [{Senders2send, Data2send}]),
+	    error_logger:info_msg("command handled ~ts\n",[Data2send]),
 	    case catch eadc_utils:send_to_senders(Senders2send,Data2send) of
 		ok -> ok;
 		Error ->
@@ -624,9 +623,9 @@ user_login(Client) ->
     {client, Hooked_Client}={client,get_val(client, Hooked_Args)},
     {data, Data_to_send}={data,Hooked_Client#client.inf},
     {logoff, Logoff}={logoff,eadc_utils:get_val(logoff, Hooked_Args)},
-    case is_list(Logoff) of
-	true -> return({stop, Client, Logoff});
-	false -> ok
+    case Logoff of
+	'NO KEY' -> ok;
+	_ -> return({stop, Client, Logoff})
     end,
     case is_record(Hooked_Client, client) of
 	true ->

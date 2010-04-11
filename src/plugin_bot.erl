@@ -45,7 +45,7 @@ user_login(Args) ->
     topic_to_clients([Client]),
 
     %% check ban
-    Nick=eadc_utils:get_val(nick, Args),IP=eadc_utils:get_val(addr, Args),
+    Nick=Client#client.nick,IP=Client#client.addr,
     %% banned nick ++ banned IP
     BanList=mnesia:dirty_match_object(#ban{nick=Nick, _='_'})++
 	mnesia:dirty_match_object(#ban{ip=IP, _='_'}),
@@ -58,15 +58,14 @@ user_login(Args) ->
 		       end, #ban{time=0}, BanList), 
 
     Now=eadc_utils:get_unix_timestamp(now()),
-    case (MaxBan#ban.time > Now) of
+    Diff=MaxBan#ban.time-Now,
+    case (Diff > 0) of
 	true -> %% user still banned
 	    #ban{op=OPName,reason=Reason}=MaxBan,
-	    BanMsg=eadc_utils:quote("Banned by "++OPName++". Reason: "++Reason),
-	    State=eadc_utils:get_val(state, Args),Other=State#state.other,
-	    New_State=State#state{other=eadc_utils:set_val(banned, true, Other)},
-	    New_Args1=eadc_utils:set_val(client, {logoff,"ISTA 231 "++BanMsg}, Args),
-	    New_Args2=eadc_utils:set_val(state, New_State, New_Args1),
-	    New_Args2;
+	    BanMsg="Banned by "++OPName++". Reason: "++Reason,
+	    eadc_utils:send_to_client(Client, eadc_utils:a2s(["ISTA", "231", BanMsg])),
+	    eadc_utils:send_to_client(Client, eadc_utils:a2s(["ISTA", "231", lists:concat([Diff," sec(s) left"])])),
+	    eadc_utils:set_val(logoff, "", Args);
 	false -> %% ban time is expired
 	    motd(Client),
 	    Args
