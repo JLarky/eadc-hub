@@ -12,7 +12,7 @@
 %% API
 -export([start_link/0]).
 -export([send/2,sendn/2,logoff/2]).
--export([client_get/1,client_all/0]).
+-export([client_get/1,client_all/0,client_write/1,client_delete/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -21,9 +21,9 @@
 -define(TIMEOUT, 30000).
 -include("eadc.hrl").
 
--export([get_socket_by_sid/1,all_senders/0,get_uniq_cid/1]).
+-export([get_socket_by_sid/1,all_senders/0]).
+-export([get_uniq_sid/0, get_uniq_cid/0, get_uniq_cid/1]).
 
--export([handle_received/2]).
 
 %%====================================================================
 %% API
@@ -170,8 +170,7 @@ handle_data(Connect,Data) ->
 		ok ->
 		    ok;
 		Error ->
-		    error_logger:info_msg("Error in handle data: ~p\n",
-					  [Error]),
+		    ?ERROR("Error in handle data: ~p\n",[Error]),
 		    ok
 	    end
     end.
@@ -185,7 +184,7 @@ handle_command(H, Cmd, Tail, Data, Connect) ->
     StateName=Connect#connect.statename,
     case catch handle_command(H, Cmd, Tail, Data, Connect, StateName) of
 	{Senders2send, Data2send} when is_list(Senders2send) ->
-	    error_logger:info_msg("command handled ~ts\n",[Data2send]),
+	    ?DEBUG(info, "command handled ~ts\n",[Data2send]),
 	    case catch eadc_utils:send_to_senders(Senders2send,Data2send) of
 		ok -> ok;
 		Error ->
@@ -423,8 +422,6 @@ get_client_by_sender(Sender) when is_record(Sender,sender) ->
 	    []
     end.
 
-sup_update(Sup, Sup_Update) when not is_list(Sup)->
-    sup_update(["BASE"], Sup_Update);
 sup_update(Sup, [[$A,$D| SupName]|Tail]) ->
     NotNew=fun(CSup) -> (CSup /= SupName) end,
     sup_update([SupName|lists:filter(NotNew, Sup)], Tail);
@@ -446,6 +443,11 @@ sendn(Sender,Data) ->
 
 send(Sender,Data) ->
     sockroute:send(Sender,Data).
+
+get_uniq_cid() ->
+    Cid=eadc_utils:random((1 bsl 192)-1),
+     %% 192 bit
+    get_uniq_cid(eadc_utils:cid_to_s(Cid)).
 
 get_uniq_cid(Cid) ->
     MatchHead = #client{cid='$1', _='_'},Guard = [{'==', '$1', Cid}],Result = '$1',
@@ -605,27 +607,27 @@ inf_update(Inf, Inf_update) ->
 
 user_login(Client) ->
     Hooked_Args=eadc_plugin:hook(user_login, [{client, Client}]),
-    {client, Hooked_Client}={client,get_val(client, Hooked_Args)},
-    {data, Data_to_send}={data,Hooked_Client#client.inf},
-    {logoff, Logoff}={logoff,eadc_utils:get_val(logoff, Hooked_Args)},
+    Hooked_Client=get_val(client, Hooked_Args),
+    case is_record(Hooked_Client, client) of
+	true -> ok;
+	_ -> %% logoff
+	    return({stop, Client, "Wrong Client: "++thing_to_string({Hooked_Client})})
+    end,
+    Data_to_send=Hooked_Client#client.inf,
+    Logoff=eadc_utils:get_val(logoff, Hooked_Args),
     case Logoff of
 	'NO KEY' -> ok;
 	_ -> return({stop, Client, Logoff})
     end,
-    case is_record(Hooked_Client, client) of
-	true ->
-	    lists:foreach(fun(#client{inf=CInf}) ->
-				  eadc_utils:send_to_client(Hooked_Client, CInf)
-			  end, client_all()),
-	    Senders=all_senders(),       %% before client_write, so current client
-	    client_write(Hooked_Client), %% not in the Senders
-	    %% running select query right after write is bad for performance
-	    Senders_to_inform=[Hooked_Client#client.sender|Senders],
-	    eadc_utils:send_to_senders(Senders_to_inform,Data_to_send),
-	    ok;
-	false -> %% logoff
-	    {stop, Client, "Wrong Client: "++thing_to_string({Hooked_Client})}
-    end.
+    lists:foreach(fun(#client{inf=CInf}) ->
+			  eadc_utils:send_to_client(Hooked_Client, CInf)
+		  end, client_all()),
+    Senders=all_senders(),       %% before client_write, so current client
+    client_write(Hooked_Client), %% not in the Senders
+    %% running select query right after write is bad for performance
+    Senders_to_inform=[Hooked_Client#client.sender|Senders],
+    eadc_utils:send_to_senders(Senders_to_inform,Data_to_send),
+    ok.
 
 check_sid(Connect,Sid,StateName) ->
     MyRealSid=(catch eadc_utils:sid_to_s(Connect#connect.adcsid)),

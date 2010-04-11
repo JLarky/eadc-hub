@@ -34,7 +34,7 @@ start(_Type, _Args) ->
 
     eadc_user:init(),
 
-    error_logger:logfile({open, 'error.log'}),error_logger:tty(false),
+    error_logger:logfile({open, "error.log"}),error_logger:tty(false),
 
     eadc_plugin:hook(init, [{pids,[]},{data,[]}]),
 

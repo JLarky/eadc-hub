@@ -5,7 +5,7 @@
 -export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
--export([code_reload/1, make_script/0, make_tar/1]).
+-export([debug/3, code_reload/1, make_script/0, make_tar/1]).
 -export([parse_inf/1, deparse_inf/2, get_required_field/3, get_nick_field/1,get_cid_field/2,
 	 get_val/2, get_val/3, set_val/3]).
 
@@ -181,6 +181,18 @@ sid_to_s(Sid) ->
 cid_to_s(Sid) ->
     Sid_string=base32(Sid),
     fillA(39-length(Sid_string), Sid_string).
+
+%% @spec debug(atom(), Format::string(), Data::list()) -> ok
+debug(debug, _Format, _Data) ->
+    %%error_logger:info_msg(Format, Data);
+    ok;
+debug(info, Format, Data) ->
+    error_logger:info_msg(Format, Data);
+debug(error, Format, Data) ->
+    error_logger:error_msg(Format, Data);
+debug(_Type, Format, Data) ->
+    error_logger:info_msg(Format, Data).
+
 
 %% @spec code_reload(atom()) -> {module, Module} | {error, Error}
 %% @doc does 'make' and loads Module if it's possible.

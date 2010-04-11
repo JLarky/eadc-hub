@@ -11,7 +11,7 @@
 
 %% API
 -export([init/0]).
--export([access/1,access/2]).
+-export([access/1,access/2,is_user/1]).
 -export([get_client_account/1, client_find/1]).
 -export([add_permission/2,del_permission/2]).
 
@@ -61,6 +61,11 @@ role_access(Roles, Permission) ->
 		      _ -> []
 		  end,
     lists:any(fun(Role_a) -> lists:member(Role_a,Roles) end, Roles_allowed).
+
+is_user(#account{roles=Roles}=_Account) when Roles==[anonymous]->
+    true;
+is_user(Account) when is_record(Account,account) ->
+    false.
 
 %%--------------------------------------------------------------------
 %% Function: get_client_account(Pid)

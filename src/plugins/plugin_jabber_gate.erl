@@ -93,7 +93,7 @@ connect(Host, Port, Vhost) ->
 	{xmlelement,"handshake",[],[]} ->
 	    lists:foreach(fun(#client{nick=Nick}) ->
 				  gen_fsm:send_event(jabber_server, {user_login, Nick})
-			  end, eadc_client_fsm:client_all()),
+			  end, eadc_client:client_all()),
 	    {next_state, 'NORMAL', StateData};
 	Error ->
 	    ?DEBUG(error, "JABBER PLUGIN: WRONG PASSWORD: ~w\n", [Error]),
@@ -211,7 +211,7 @@ user_login(Args) ->
 
 user_quit(Args) ->
     Sid=eadc_utils:get_val(sid, Args),
-    Client=eadc_client_fsm:client_get(Sid),
+    Client=eadc_client:client_get(Sid),
     Nick=Client#client.nick,
     gen_fsm:send_event(jabber_server, {user_quit, Nick}),
     Args.
@@ -223,7 +223,7 @@ chat_msg(Args) ->
 	_ ->
 	    Sid=eadc_utils:get_val(sid, Args),
 	    Msg=eadc_utils:get_val(msg, Args),
-	    Client=eadc_client_fsm:client_get(Sid),
+	    Client=eadc_client:client_get(Sid),
 	    Nick=Client#client.nick,
 	    %%io:format("------------------------======================-------------------- ~w\n",[{chat_msg, Nick, Msg}]),
 	    (catch gen_fsm:send_event(jabber_server, {chat_msg, Nick, Msg})),
@@ -279,7 +279,7 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 		    case eadc_utils:get_val("type", Attrs) of
 			"unavailable" -> %% do logout
 			    Sid=Client#client.sid,
-			    eadc_client_fsm:client_delete(Sid),
+			    eadc_client:client_delete(Sid),
 			    eadc_utils:broadcast({string, "IQUI "++eadc_utils:sid_to_s(Sid)}),
 			    %%io:format("LOGOUT ~s\n", [atom_to_list(Sid)]),
 			    ok;
@@ -289,11 +289,11 @@ handle_xml({xmlelement, Name, Attrs, Els}, State) ->
 				    ?DEBUG(error, "~s\n", [already_logged]);
 				_ ->
 				    ?DEBUG(error, "~s\n", [login]),
-				    Cid=eadc_client_fsm:get_unical_cid(),
-				    Sid=eadc_client_fsm:get_unical_SID(),
+				    Cid=eadc_client:get_uniq_cid(),
+				    Sid=eadc_client:get_uniq_sid(),
 				    Inf="BINF "++eadc_utils:sid_to_s(Sid)++" ID"++Cid++" NI"++From_Nick++" DE"++Conf,
 				    eadc_utils:broadcast({string, Inf}),
-				    eadc_client_fsm:client_write(#client{cid=Cid, sid=Sid, nick=From_Nick, inf=Inf, pid=jabber_gate}),
+				    eadc_client:client_write(#client{cid=Cid, sid=Sid, nick=From_Nick, inf=Inf, pid=jabber_gate}),
 				    ok
 			    end,
 			    ok

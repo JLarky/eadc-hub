@@ -111,7 +111,7 @@ chat_msg(Args) ->
 		    eadc_utils:error_to_client(Client, Error);
 		  Error ->
 		    eadc_utils:error_to_client(Client, "Report to admin.\nError: "++
-					       eadc_utils:thing_string(Error))
+					       eadc_utils:thing_to_string(Error))
 	    end,
 	    Args1=eadc_utils:set_val(msg, [], Args),
 	    eadc_utils:set_val(senders, [], Args1);
@@ -203,8 +203,8 @@ Roles:
 		Pass   -> throw({error, "usage: !passwd <pass>"})
 	    end,
 	    
-	    case is_record(Account,account) of
-		false -> 
+	    case eadc_user:is_user(Account) of
+		false ->
 		    eadc_utils:error_to_client(Client, "You are not registred");
 		true ->
 		    {atomic, ok}=eadc_user:account_write(Account#account{pass=Pass}),
@@ -427,7 +427,7 @@ Roles:
 			 end,
 	    Login=string:join(Login_," "),
 	    Acc=eadc_user:account_get(Login),
-	    Roles=case is_record(Acc,account) of
+	    Roles=case eadc_user:is_user(Acc) of
 		      true ->
 			  Acc#account.roles;
 		      _ ->

@@ -1,17 +1,7 @@
 
--define(DEBUG(Type, Format, Data), begin
-				       case Type of
-					   debug ->
-					       %%error_logger:info_msg(Format, Data);
-					       ok;
-					   info ->
-					       error_logger:info_msg(Format, Data);
-					   error ->
-					       error_logger:error_msg(Format, Data);
-					   _ ->
-					       error_logger:info_msg(Format, Data)
-				       end
-				   end).
+-define(DEBUG(Type, Format, Data), eadc_utils:debug(Type, Format, Data)).
+
+-define(ERROR(Format, Data), error_logger:error_msg(Format, Data)).
 
 -record(connect,{
 	  sender,      % sender record
