@@ -354,35 +354,20 @@ client_command(_StateName=normal,"B","INF",Senders,Data,Args) ->
     %% no any plugin
     {Senders,New_Inf_to_send};
 
-client_command(_StateName=normal,Header,Command,Senders,Data,Args_) ->
-    {Hook,Args}=case {Header,Command} of
-		    {"B","MSG"} -> 
-			[Msg|_]=eadc_utils:get_val(par,Args_),
-			{chat_msg,[{msg,eadc_utils:unquote(Msg)}|Args_]};
-		    {"E","MSG"} -> 
-			{priv_msg,Args_};
-		    {"D","CTM"} ->
-			{ctm,Args_};
-		    {"D","RCM"} ->
-			{rcm,Args_};
-		    {_,_} -> 
-			{other,Args_}
-	 end,
-    case Hook of
-	other -> %% no plugin
-	    {Senders, Data};
-	_ ->
-	    New_Args=eadc_plugin:hook(Hook, [{senders,Senders},{data,Data}|Args]),
-	    NSenders=eadc_utils:get_val(senders, New_Args),
-	    NData   =eadc_utils:get_val(data, New_Args),
-	    (true==is_list(NSenders)) 
-		orelse (ok=?DEBUG(error, "Wrong hooked sender ~p", [NSenders]) or
-			return({Senders, Data})),
-	    (true==is_list(NData))
-		orelse (ok=?DEBUG(error, "Wrong hooked data ~p", [NData]) or
-			return({Senders, Data})),
-	    {NSenders, NData}
-    end;
+client_command(_StateName=normal,"B","MSG",Senders,Data,Args) ->
+    [Msg|_]=eadc_utils:get_val(par,Args),
+    run_hook(chat_msg,Senders,Data,[{msg,eadc_utils:unquote(Msg)}|Args]);
+client_command(_StateName=normal,"E","MSG",Senders,Data,Args) ->
+    [Msg|_]=eadc_utils:get_val(par,Args),
+    run_hook(priv_msg,Senders,Data,[{msg,eadc_utils:unquote(Msg)}|Args]);
+client_command(_StateName=normal,"D","CTM",Senders,Data,Args) ->
+    run_hook(ctm,Senders,Data,Args);
+client_command(_StateName=normal,"D","RCM",Senders,Data,Args) ->
+    run_hook(rcm,Senders,Data,Args);
+client_command(_StateName=normal, _H,"SCH",Senders,Data,Args) ->
+    run_hook(sch,Senders,Data,Args);
+client_command(_StateName=normal, _H, _Cmd,Senders,Data,_Args) ->
+    {Senders,Data}; %% no plugin
 
 %% ERROR
 
@@ -658,5 +643,15 @@ check_sid(Connect,Sid,StateName) ->
 		    logoff(Connect,{string,eadc_utils:a2s(["ISTA", "240","SID is not correct"])})
 	    end,
 	    return({[],"Wrong SID"}) %% deny to futher processing
+    end.
+
+run_hook(Hook, Senders,Data,Args) ->
+    New_Args=eadc_plugin:hook(Hook, [{senders,Senders},{data,Data}|Args]),
+    NSenders=eadc_utils:get_val(senders, New_Args),
+    NData   =eadc_utils:get_val(data, New_Args),
+    case (is_list(NSenders) andalso is_list(NData)) of
+	true ->  {NSenders, NData};
+	false -> ?DEBUG(error, "Wrong hooked senders/data ~p", [{NSenders,NData}]),
+		 {Senders, Data}
     end.
 
