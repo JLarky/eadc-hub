@@ -129,6 +129,7 @@ User's commands:
  !regme <password> - registers new user with password <password>
  !passwd <password> - changes current user's password to <password>
  !userlist - shows all users with hidden passwords
+ !version - shows hub's version info
 
 Admin's commands:
  !regnewuser <username> <pass> - register user with password <pass>
@@ -154,6 +155,16 @@ Roles:
  !addrole <role> <login> - addes role to login
  !delrole <role> <login> - deletes role from login\n",
 	    eadc_utils:info_to_client(Client, Hlp);
+	"version" ->
+	    FileName="../.git/refs/heads/master",
+	    case file:read_file(FileName) of
+		{ok, File} when is_binary(File) ->
+		    Commit=binary_to_list(File),
+		    Out="http://github.com/JLarky/eadc-hub/commit/"++Commit;
+		_ ->
+		    Out="File "++FileName++" not found"
+	    end,
+	    eadc_utils:info_to_client(Client, Out);
 	"regnewuser" ->
 	    case eadc_user:access(Account,'reg user') of
 		true ->
