@@ -61,7 +61,7 @@ user_login(Args) ->
 
 ten_lines() ->
     case eadc_utils:get_option(ten_lines, tenlines, []) of
-	Msgs=[_|_] ->
+	Msgs when is_list(Msgs) ->
 	    Ten_lines = lists:foldl(fun({Time, _Sid, Msg, Nick}, Acc) ->
 					    {_,{A,S,D}}=Time,
 					    lists:concat([Acc, "[",A,":",S,":",D,"] <",Nick, "> ", Msg, "\n"])

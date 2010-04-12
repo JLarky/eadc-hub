@@ -5,7 +5,7 @@
 -export([base32/1, base32_encode/1,unbase32/1, base32_decode/1, 
 	 random/1, random_string/1, sid_to_s/1, cid_to_s/1]).
 
--export([debug/3, code_reload/1, make_script/0, make_tar/1]).
+-export([debug/3, code_reload/1, code_update/0, code_update/1, make_script/0, make_tar/1]).
 -export([parse_inf/1, deparse_inf/2, get_required_field/3, get_nick_field/1,get_cid_field/2,
 	 get_val/2, get_val/3, set_val/3]).
 
@@ -200,6 +200,36 @@ code_reload(Module) ->
     io:format("~s\n", [os:cmd("cd .. && make")]),
     true = code:soft_purge(Module),
     code:load_file(Module).
+
+code_update() ->
+    code_update(compiled).
+
+code_update(Mode) ->
+    A=os:cmd("cd .. && make"),
+    io:format("~ts\n",[A]),
+    case string:str(A, "Error") of
+	0 -> %% no error in make
+	    case file:consult("eadc.app") of
+		{ok, [{application,eadc,D}]} -> Info=D;
+		Other -> Info=throw({Other})
+	    end,
+	    Modules=get_val(modules, Info),
+	    F=fun(Module) ->
+		      case (Mode/=compiled) or (string:str(A, atom_to_list(Module))>0) of
+			  false -> %% module was not changed
+			      ok;
+			  true -> %% module was compiled
+			      P=code:soft_purge(Module),
+			      C=code:load_file(Module),
+			      M=case P of
+				    true -> "";
+				    false -> "Warning!: "
+				end,
+			      io:format("~25s: ~p\n",[M++atom_to_list(Module),{P,C}])
+		      end
+	      end, lists:foreach(F, Modules);
+	_ -> error
+    end.
 
 make_script() ->
     systools:make_script("eadc",[{outdir, "ebin"},{path,["deps/*/ebin"]}]).
