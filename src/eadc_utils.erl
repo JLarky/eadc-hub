@@ -311,9 +311,35 @@ send_to_sender(Sender, {args, List}) when is_list(List) ->
     String = eadc_utils:a2s(List),
     send_to_sender(Sender, String);
 send_to_sender(Sender, String) when is_record(Sender,sender) and is_list(String) ->
-    sockroute:sendn(Sender, String);
+    wait_sockroute(Sender#sender.pid, 100, 10),
+    sockroute:asendn(Sender, String);
+
 send_to_sender(Unknown1, Unknown2) ->
     ?DEBUG(error, "send_to_pid(~w, ~w)\n", [Unknown1, Unknown2]).
+
+wait_sockroute(_Pid, N, M) when (N < M) ->
+    ok;
+wait_sockroute(Pid, N, M) ->
+    case get_queue_len(Pid) > N of
+	false -> ok;
+	true -> 
+	    %%sockroute:send(Sender, "\n"),
+	    timer:sleep(0),
+	    ok
+	    %%wait_sockroute(Pid, N-1, M)
+    end.
+
+get_queue_len(Pid) ->
+    case process_info(Pid) of
+	undefined -> 0;
+	Info ->
+	    MQ=get_val(message_queue_len, Info),
+	    case MQ of
+		I when is_integer(I) -> I;
+		_ -> 0
+	    end
+    end.
+
 
 
 %% @spec send_to_pids(Pids, Message::term()) -> ok

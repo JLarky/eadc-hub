@@ -11,12 +11,15 @@
 
 %% API
 -export([start_link/0]).
--export([send/2,sendn/2,logoff/2]).
+-export([logoff/2]).
 -export([client_get/1,client_all/0,client_write/1,client_delete/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
+
+%% spawn calls
+%-export([user_login_/1]).
 
 -define(TIMEOUT, 30000).
 -include("eadc.hrl").
@@ -141,8 +144,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 handle_received(Connect,Data) ->
-    file:write_file("/tmp/1",lists:reverse(Connect#connect.buff)),
-    file:write_file("/tmp/2",thing_to_string(Data)),
     handle_received(Data, Connect#connect.buff, Connect).
 
 handle_received([], Buff, #connect{buff=Buff}) ->
@@ -160,7 +161,7 @@ handle_received([H|Tail], Buff, Connect) ->
 
 
 handle_data(Connect,"") -> %% keep alive
-    sockroute:send(Connect#connect.sender,"\n");
+    sockroute:asend(Connect#connect.sender,"\n");
 handle_data(Connect,Data) ->
     Message=string:tokens(Data, " "),
     case Message of
@@ -239,10 +240,10 @@ client_command(wait_data,"H","SUP",[],_Data,Args) ->
     Sender=Connect#connect.sender,
     SupList=eadc_utils:get_val(par,Args),
     Sup=sup_update([], SupList),
-    sockroute:send(Sender,"ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
+    sockroute:asend(Sender,"ISUP ADBAS0 ADBASE ADTIGR ADUCM0 ADUCMD\n"),
     Sid=get_uniq_sid(),
     SID=eadc_utils:sid_to_s(Sid),
-    sockroute:send(Sender,cat(["ISID ",SID,"\n"])),
+    sockroute:asend(Sender,cat(["ISID ",SID,"\n"])),
     {ok, {IP, _Port}} = inet:peername(Sender#sender.socket),
     Client=#client{sid=Sid,sender=Sender,addr=IP,sup=Sup,other=[]},
     NewConnect=Connect#connect{statename=wait_inf,adcsid=Sid,pre_client=Client},
@@ -438,12 +439,6 @@ sup_update(Sup, []) ->
 cat(A) when is_list(A) ->
     lists:concat(A).
 
-sendn(Sender,Data) ->
-    send(Sender,cat([Data,"\n"])).
-
-send(Sender,Data) ->
-    sockroute:send(Sender,Data).
-
 get_uniq_cid() ->
     Cid=eadc_utils:random((1 bsl 192)-1),
      %% 192 bit
@@ -613,21 +608,30 @@ user_login(Client) ->
 	_ -> %% logoff
 	    return({stop, Client, "Wrong Client: "++thing_to_string({Hooked_Client})})
     end,
-    Data_to_send=Hooked_Client#client.inf,
-    Logoff=eadc_utils:get_val(logoff, Hooked_Args),
+     Logoff=eadc_utils:get_val(logoff, Hooked_Args),
     case Logoff of
 	'NO KEY' -> ok;
 	_ -> return({stop, Client, Logoff})
     end,
-    lists:foreach(fun(#client{inf=CInf}) ->
-			  eadc_utils:send_to_client(Hooked_Client, CInf)
-		  end, client_all()),
+    %%spawn(?MODULE, user_login_, [Hooked_Client]),
+    user_login_(Hooked_Client),
+    ok.
+
+user_login_(Hooked_Client) ->
+    Data_to_send=Hooked_Client#client.inf,
+    %% lists:foreach(fun(#client{inf=CInf}) ->
+    %% 			  eadc_utils:send_to_client(Hooked_Client, CInf)
+    %% 		  end, client_all()),
+
+    D=lists:foldl(fun(#client{inf=CInf}, Acc) ->
+			  [CInf,10|Acc]
+		  end, "", client_all()),
+    eadc_utils:send_to_client(Hooked_Client, D),
     Senders=all_senders(),       %% before client_write, so current client
     client_write(Hooked_Client), %% not in the Senders
     %% running select query right after write is bad for performance
     Senders_to_inform=[Hooked_Client#client.sender|Senders],
-    eadc_utils:send_to_senders(Senders_to_inform,Data_to_send),
-    ok.
+    eadc_utils:send_to_senders(Senders_to_inform,Data_to_send).
 
 check_sid(Connect,Sid,StateName) ->
     MyRealSid=(catch eadc_utils:sid_to_s(Connect#connect.adcsid)),

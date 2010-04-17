@@ -10,14 +10,20 @@
 -behaviour(gen_server).
 
 %% API
--export([start/1,stop/1,connect/3,aconnect/3,listen/2,send/3,send/2,sendn/2,close/1]).
+-export([start/1,stop/1,send/3,send/2,sendn/2,asend/2,asendn/2,close/1]).
+-export([connect/3,connect/4,aconnect/3,aconnect/4,listen/2,listen/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
+%% for spawn
+-export([send_tcp/2]).
+
 -record(state, {type,protocol,worker,socket}).
 -record(sender, {socket,pid}).
+
+-define(SOMETIMES, random:uniform(1000)==1).
 
 %%====================================================================
 %% API
@@ -44,11 +50,20 @@ stop(Pid) ->
 connect(Pid,Host,Port) ->
     gen_server:call(Pid,{connect, Host, Port}).
 
+connect(Pid,Host,Port, Options) ->
+    gen_server:call(Pid,{connect, Host, Port, Options}).
+
 aconnect(Pid,Host,Port) ->
     gen_server:call(Pid,{aconnect, Host, Port}).
 
+aconnect(Pid,Host,Port, Options) ->
+    gen_server:call(Pid,{aconnect, Host, Port, Options}).
+
 listen(Pid,Port) ->
     gen_server:call(Pid,{listen, Port}).
+
+listen(Pid,Port, Options) ->
+    gen_server:call(Pid,{listen, Port, Options}).
     
 send(Pid, Socket, Thing) ->
     gen_server:call(Pid,{send, Socket, Thing}).
@@ -58,6 +73,12 @@ send(#sender{pid=Pid, socket=Socket}, Thing) ->
 
 sendn(#sender{pid=Pid, socket=Socket}, Thing) ->
     gen_server:call(Pid,{send, Socket, [Thing,"\n"]}).
+
+asend(#sender{pid=Pid, socket=Socket}, Thing) ->
+    gen_server:cast(Pid,{send, Socket, Thing}).
+
+asendn(#sender{pid=Pid, socket=Socket}, Thing) ->
+    gen_server:cast(Pid,{send, Socket, [Thing,"\n"]}).
 
 close(#sender{pid=Pid, socket=Socket}) ->
     gen_server:call(Pid,{close, Socket}).
@@ -77,7 +98,6 @@ close(#sender{pid=Pid, socket=Socket}) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init({Pid,Options}) when is_pid(Pid) and is_list(Options) ->
-    io:format("Started !!\n"),
     Types    =fun(E)->lists:member(E,[sync,async])end,
     Protocols=fun(E)->lists:member(E,[tcp,ssl])   end,
     Type    =lists:last([async|lists:filter(Types,Options)]),
@@ -97,27 +117,36 @@ init({Pid,Options}) when is_pid(Pid) and is_list(Options) ->
 
 %%% API
 %% see connect/3
-handle_call({connect, Host, Port}, _From, #state{protocol=tcp}=State)->
+handle_call({connect, Host, Port}, From, State)->
+    handle_call({connect, Host, Port, [binary, {packet, 0},{active, false}]}, From, State);
+%%% API
+%% see connect/4
+handle_call({connect, Host, Port, Options}, _From, #state{protocol=tcp}=State)->
     #state{worker=Worker,type=Type,protocol=Protocol}=State,
-    case (catch gen_tcp:connect(Host, Port,[binary, {packet, 0},{active, false}])) of
+    case (catch gen_tcp:connect(Host, Port,Options)) of
 	{ok, Connection} ->
 	    Me=self(),spawn(fun()->do_recv(Type,Protocol,Me,Connection,Worker)end),	    
-	    case (random:uniform(100)==1) of
+	    case (?SOMETIMES) of
 		true  -> spawn(erlang,garbage_collect,[Me]);
 		false -> ok
 	    end,
-	    {reply, {ok,Connection}, State#state{socket=connect}};
+	    {reply, {ok,#sender{pid=Me,socket=Connection}}, State#state{socket=connect}};
 	Error ->
 	    error_logger:error_info({?FILE,?LINE, {"Error in connect ", Error}}),
 	    {reply, {error,Error}, State#state{socket=connect}}
     end;
 %%% API
 %% see aconnect/3
-handle_call({aconnect, Host, Port}, _From, #state{protocol=tcp}=State)->
+handle_call({aconnect, Host, Port}, From, State)->
+    handle_call({aconnect, Host, Port, [binary, {packet, 0},{active, false}]}, From, State);
+
+%%% API
+%% see aconnect/4
+handle_call({aconnect, Host, Port, Options}, _From, #state{protocol=tcp}=State)->
     #state{worker=Worker,type=Type,protocol=Protocol}=State,
     Me=self(),
     spawn(fun() ->
-		  case (catch gen_tcp:connect(Host, Port,[binary, {packet, 0},{active, false}])) of
+		  case (catch gen_tcp:connect(Host, Port,Options)) of
 		      {ok, Connection} ->
 			  gen_tcp:controlling_process(Connection, Me),
 			  gen_server:cast(Worker,{sr,#sender{pid=Me,socket=Connection},aconnect}),
@@ -127,15 +156,16 @@ handle_call({aconnect, Host, Port}, _From, #state{protocol=tcp}=State)->
 			  {reply, {error,Error}, State#state{socket=connect}}
 		  end
 	  end),
-    case (random:uniform(100)==1) of
+    case (?SOMETIMES) of
 	true  -> spawn(erlang,garbage_collect,[Me]);
 	false -> ok
     end,
     {reply, async, State#state{socket=connect}};
 
+
 %%% API
-%% see listen/2
-handle_call({listen, {Port, Options}}, _From, #state{protocol=tcp}=State)->
+%% see listen/3
+handle_call({listen, Port, Options}, _From, #state{protocol=tcp}=State)->
     #state{socket=Socket,worker=Worker,type=Type,protocol=Protocol}=State,
     (catch gen_tcp:close(Socket)),%% in case of connection before
     case (catch gen_tcp:listen(Port, Options)) of
@@ -146,31 +176,19 @@ handle_call({listen, {Port, Options}}, _From, #state{protocol=tcp}=State)->
 	    error_logger:error_info({?FILE,?LINE, {"Error in connect ", Error}}),
 	    {reply, {error,Error}, State#state{socket=undefined}}
     end;
-handle_call({listen, Port}, _From, #state{protocol=tcp}=State)->
-    #state{socket=Socket,worker=Worker,type=Type,protocol=Protocol}=State,
-    (catch gen_tcp:close(Socket)),%% in case of connection before
-    case (catch gen_tcp:listen(Port, [binary, {packet, 0},{active, false}])) of
-	{ok, ListenSocket} ->
-	    Me=self(),spawn(fun()->accept(Type,Protocol,Me,ListenSocket,Worker) end),
-	    {reply, {ok,ListenSocket}, State#state{socket=ListenSocket}};
-	Error ->
-	    error_logger:error_info({?FILE,?LINE, {"Error in connect ", Error}}),
-	    {reply, {error,Error}, State#state{socket=undefined}}
-    end;
+%%% API
+%% see listen/2
+handle_call({listen, Port}, From, State)->
+    handle_call({listen, {Port, [binary, {packet, 0},{active, false}]}}, From, State);
+
 %%% API
 %% see send/3
 handle_call({send, Socket, Thing}, _From, #state{protocol=tcp}=State) ->
-    Reply=
-	case (catch gen_tcp:send(Socket, Thing)) of
-	    {error,einval} -> %% may be because of utf8?
-		(catch gen_tcp:send(Socket, unicode:characters_to_binary(Thing)));
-	    Other ->
-		Other
-	end,
-    case (random:uniform(1000)==1) of % one of N cases
+    Reply=send_tcp(Socket, Thing),
+    case (?SOMETIMES) of % one of N cases
 	true ->
-	    %%garbage_collect();
-	    {reply, Reply, State,hibernate};
+	    garbage_collect(),
+	    {reply, Reply, State};
 	false ->
 	    {reply, Reply, State}
     end;
@@ -179,10 +197,10 @@ handle_call({send, Socket, Thing}, _From, #state{protocol=tcp}=State) ->
 %% see close/1
 handle_call({close, Socket}, _From, #state{protocol=tcp}=State) ->
     Reply=(catch gen_tcp:close(Socket)),
-    case (random:uniform(1000)==1) of % one of N cases
+    case (?SOMETIMES) of % one of N cases
 	true ->
-	    %%garbage_collect();
-	    {reply, Reply, State,hibernate};
+	    garbage_collect(),
+	    {reply, Reply, State};
 	false ->
 	    {reply, Reply, State}
     end;
@@ -199,6 +217,16 @@ handle_call(Request, From, State)->
 %%                                      {stop, Reason, State}
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
+handle_cast({send, Socket, Thing}, #state{protocol=tcp}=State) ->
+    spawn(?MODULE, send_tcp, [Socket, Thing]),
+    case (?SOMETIMES) of % one of N cases
+	true ->
+	    garbage_collect(),
+	    {noreply, State};
+	false ->
+	    {noreply, State}
+    end;
+
 handle_cast({closed,Socket}, #state{socket=Socket}=State)-> % close listen socket
     {noreply,State#state{socket=undefined}};
 handle_cast(stop, State) ->
@@ -244,6 +272,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+send_tcp(Socket, Thing) ->
+    case (catch gen_tcp:send(Socket, Thing)) of
+	{error,einval} -> %% may be because of utf8?
+	    (catch gen_tcp:send(Socket, unicode:characters_to_binary(Thing)));
+	Other ->
+	    Other
+    end.
+
 
 do_recv(async,tcp,Pid,Sock,Worker) -> %% it must catch 100% error without crash itself
     case (catch gen_tcp:recv(Sock, 0)) of

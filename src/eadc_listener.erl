@@ -47,9 +47,8 @@ init([Port, Module]) ->
     process_flag(trap_exit, true),
     io:format("~p\n",[{self()}]),
     {ok,Pid}=sockroute:start(self()),
-    register(listen_sockroute,Pid),
     Options=[list, {packet, line},{active, false}],
-    case sockroute:listen(Pid,{Port,Options}) of
+    case sockroute:listen(Pid,Port,Options) of
 	{ok,Socket} ->
 	    {ok, #lstate{client_started=false,
 			listeners = [Pid],
