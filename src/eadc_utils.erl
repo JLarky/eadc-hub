@@ -68,10 +68,7 @@ format(Format, Thing) ->
     lists:flatten(io_lib:format(Format,Thing)).
 
 random(Max) ->
-    {A,B,C}=time(),
-    {D,E,F}=random:seed(),
-    random:seed(A+D+erlang:crc32(pid_to_list(self())),B+E, C+F),
-    random:uniform(Max).
+    random_p:uniform(Max).
 
 random_string(Length) ->
     random_string_(Length, "").
@@ -79,10 +76,7 @@ random_string(Length) ->
 random_string_(Length, Acc) when Length < 1->
     Acc;
 random_string_(Length, Acc) ->
-    {A,B,C}=time(),
-    {D,E,F}=random:seed(),
-    random:seed(A+D+erlang:crc32(pid_to_list(self())),B+E, C+F),
-    random_string_(Length-1, [random:uniform(255)|Acc]).
+    random_string_(Length-1, [random_p:uniform(255)|Acc]).
 
 %% @spec base32(integer()) -> [base32char()]
 %% @doc returns base32 character corresponding to V like 1 -> 'B', 31 -> '7'.
@@ -509,6 +503,9 @@ get_unix_timestamp({_MegaSecs, _Secs, _MicroSecs}=TS) ->
     calendar:datetime_to_gregorian_seconds( calendar:now_to_universal_time(TS) ) -
 	calendar:datetime_to_gregorian_seconds( {{1970,1,1},{0,0,0}}).
 
+
+profile({M,F,A}) ->
+    fprof:apply(M, F, A),fprof:profile(),fprof:analyse();
 
 profile(Module) ->
     code_reload(Module),fprof:apply(Module, test, []),fprof:profile(),fprof:analyse().

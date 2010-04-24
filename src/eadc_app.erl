@@ -32,6 +32,8 @@ start(_Type, _Args) ->
 				   record_info(fields, option)},
 				  {disc_copies, [node()]}], []),
 
+    random_p:start(),
+
     eadc_user:init(),
 
     error_logger:logfile({open, "error.log"}),error_logger:tty(false),

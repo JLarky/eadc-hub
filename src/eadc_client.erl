@@ -190,18 +190,16 @@ handle_command(H, Cmd, Tail, Data, Connect) ->
 		ok -> ok;
 		Error ->
 		    ?DEBUG(error, "Error in handle command ~p: ~p\n",
-			   [{H, Cmd, Tail, Data, Connect},Error]),
-		    ok
+			   [{H, Cmd, Tail, Data, Connect},Error])
 	    end;
 	{setconnect, NewConnect} ->
-	    connect_set(NewConnect),
-	    ok;
+	    connect_set(NewConnect);
 	{stop, Client, Msg} ->
-	    logoff(Client, Msg),
-	    ok;
+	    logoff(Client, Msg);
 	Other ->
 	    error_logger:format("Other ~p: ~p", [{H, Cmd, Tail, Data, Connect},Other])
-    end.
+    end,
+    ok.
 
 handle_command(H, Cmd, Tail, Data, Connect, StateName) ->
     Client=get_client_by_sender(Connect#connect.sender),
