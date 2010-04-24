@@ -14,6 +14,9 @@
 -export([logoff/2]).
 -export([client_get/1,client_all/0,client_write/1,client_delete/1]).
 
+%% profile
+-export([profile_start/0, profile_stop/0]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
@@ -659,3 +662,13 @@ run_hook(Hook, Senders,Data,Args) ->
 		 {Senders, Data}
     end.
 
+
+%% PROFILE
+profile_start() ->
+    fprof:trace([start,{procs,[erlang:whereis(eadc_client)]}]).
+
+profile_stop() ->
+    fprof:trace([stop]),
+    fprof:profile(),
+    fprof:analyse([totals, {dest, "fprof.analysis"}]),
+    fprof:stop().
