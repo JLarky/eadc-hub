@@ -4,6 +4,7 @@
 %%%
 %%% Public Domain (sic!)
 %%%
+%%% Some modifications was performed by JLarky<jlarky@gmail.com>
 
 -module(random_p).
 -export([start/0, stop/0, uniform/1, generator/0]).
@@ -29,15 +30,16 @@ generator() ->
 	    generator();
         shutdown ->
             true;
-        {next_random, Pid, N} ->
-            Pid ! random:uniform(N),
+        {next_random, Pid, N, Ref} ->
+            Pid ! {Ref, random:uniform(N)},
             generator()
     end.
 
 %%% Getting the next uniform random number
 uniform(N) ->
-    random_p_generator ! {next_random, self(), N},
+    Ref=make_ref(),
+    random_p_generator ! {next_random, self(), N, Ref},
     receive
-        Random ->
+        {Ref, Random} ->
             Random
     end.
