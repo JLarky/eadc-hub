@@ -17,7 +17,7 @@
 
 -export([get_option/3, set_option/3, get_options/1]).
 
--export([get_unix_timestamp/1]).
+-export([get_unix_timestamp/1,get_queue_len/1]).
 
 -export([test/0,profile/1]).
 
@@ -82,16 +82,20 @@ random_string_(Length, Acc) ->
 %% @doc returns base32 character corresponding to V like 1 -> 'B', 31 -> '7'.
 %% V is integer from 0 to 31
 %% @see unbase32/1
-base32(V) when (V >=0) and (V < 32)->
-    if
-        V < 26 ->
-	    [V+65];
-        V > 25 ->
-	    [V+24] % V-26+48+2
-    end;
+base32(V) when V < 0 -> % wrong argument
+    throw({base32,wrong_argument, V});
+base32(V) when V < 26 ->
+    [V+65];
+base32(V) when V < 32 ->
+    [V+24]; % V-26+48+2
+base32(V) when is_integer(V) ->
+    base32_(V, "").
 
-base32(V) ->
-    base32(V bsr 5)++base32(V rem 32).
+base32_(0, Buf) ->
+    Buf;
+base32_(V, Buf) ->
+    [A]=base32(V rem 32),
+    base32_(V bsr 5, [A|Buf]).
 
 %% @spec base32_encode(string()) -> base32string()
 %% @doc returns base32 encoded string of String
@@ -305,26 +309,12 @@ send_to_sender(Sender, {args, List}) when is_list(List) ->
     String = eadc_utils:a2s(List),
     send_to_sender(Sender, String);
 send_to_sender(Sender, String) when is_record(Sender,sender) and is_list(String) ->
-    wait_sockroute(Sender#sender.pid, 100, 10),
-    sockroute:asendn(Sender, String);
-
+    sockroute:sendn(Sender, String);
 send_to_sender(Unknown1, Unknown2) ->
     ?DEBUG(error, "send_to_pid(~w, ~w)\n", [Unknown1, Unknown2]).
 
-wait_sockroute(_Pid, N, M) when (N < M) ->
-    ok;
-wait_sockroute(Pid, N, M) ->
-    case get_queue_len(Pid) > N of
-	false -> ok;
-	true -> 
-	    %%sockroute:send(Sender, "\n"),
-	    timer:sleep(0),
-	    ok
-	    %%wait_sockroute(Pid, N-1, M)
-    end.
-
 get_queue_len(Pid) ->
-    case process_info(Pid) of
+    case process_info(Pid,[message_queue_len]) of
 	undefined -> 0;
 	Info ->
 	    MQ=get_val(message_queue_len, Info),
@@ -511,5 +501,6 @@ profile(Module) ->
     code_reload(Module),fprof:apply(Module, test, []),fprof:profile(),fprof:analyse().
 
 test() ->
+    "6QSA"=base32(1000000),
     "MFZWIMJSGMYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYQ"=base32_encode("asd12311111111111111111111111111111111111111111111111111111111111111111111111111111111111111"),
     ok.
