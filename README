@@ -2,7 +2,9 @@ For the first time you have to run:
  git clone git://github.com/JLarky/eadc-hub.git
  cd eadc-hub
  git submodule init
- git submodule update # get latest version of tiger hash from github.com
+ git submodule update
+
+# get latest version of tiger hash from github.com
 
 To install:
  make tiger # Linux
