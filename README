@@ -4,12 +4,15 @@ For the first time you have to run:
  git submodule init
  git submodule update
 
-# get latest version of tiger hash from github.com
+# "git submodule update" get latest version of tiger hash from github.com
 
-To install:
+To make in Unix:
  make tiger # Linux
- make tiger-win # Windows
  make
+
+To make hub in Window:
+  make tiger-win # Windows
+  make
 
 To start hub:
  ./EADC # Linux
@@ -30,3 +33,4 @@ Requirements:
 Troubleshooting:
 
 If you got "error: erl_driver.h: No such file or directory" when run 'make tiger' then please read deps/tiger/README
+
