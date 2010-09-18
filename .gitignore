@@ -8,6 +8,8 @@ ebin/*.boot
 ebin/*.script
 ebin/*.app
 ebin/*.rel
+ebin/*.txt
+ebin/*@*
 error.log
 Mnesia*
 priv/*.so
