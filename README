@@ -10,7 +10,7 @@ To make in Unix:
  make tiger # Linux
  make
 
-To make hub in Window:
+To make hub in Windows:
   make tiger-win # Windows
   make
 
