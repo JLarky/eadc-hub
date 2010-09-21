@@ -96,12 +96,7 @@ handle_cast({received,Sender,Data},State) ->
 handle_cast({closed,Sender}, State) ->
     case catch connect_get(Sender) of
 	{ok,Connect} when is_record(Connect,connect) ->
-	    case catch logoff(Connect,"") of
-		ok -> ok;
-		Error ->
-		    ?DEBUG(error, "error in handle_cast({closed, ~p}, ~p)\n~p",
-			   [Sender,State,Error])
-	    end;
+	    logoff(Connect,"");
 	{hz,[]} ->
 	    not_in_connect;
 	Error ->
@@ -199,6 +194,9 @@ handle_command(H, Cmd, Tail, Data, Connect) ->
 	    connect_set(NewConnect);
 	{stop, Client, Msg} ->
 	    logoff(Client, Msg);
+	Other when StateName=/=normal-> %% like critical error? ->
+	    error_logger:format("Error in handle_command ~p:\n ~p", [{H, Cmd, Tail, Data, Connect},Other]),
+	    logoff(Connect, eadc_utils:format("Critical error in ~p\n",[{H, Cmd}]));
 	Other ->
 	    error_logger:format("Other ~p: ~p", [{H, Cmd, Tail, Data, Connect},Other])
     end,
@@ -245,10 +243,14 @@ client_command(wait_data,"H","SUP",[],_Data,Args) ->
     Sid=get_uniq_sid(),
     SID=eadc_utils:sid_to_s(Sid),
     sockroute:asend(Sender,cat(["ISID ",SID,"\n"])),
-    {ok, {IP, _Port}} = inet:peername(Sender#sender.socket),
-    Client=#client{sid=Sid,sender=Sender,addr=IP,sup=Sup,other=[]},
-    NewConnect=Connect#connect{statename=wait_inf,adcsid=Sid,pre_client=Client},
-    {setconnect,NewConnect};
+    case inet:peername(Sender#sender.socket) of
+	{ok, {IP, _Port}} ->
+	    Client=#client{sid=Sid,sender=Sender,addr=IP,sup=Sup,other=[]},
+	    NewConnect=Connect#connect{statename=wait_inf,adcsid=Sid,pre_client=Client},
+	    {setconnect,NewConnect};
+	_Error ->
+	    {stop, Connect#connect{adcsid=Sid}, "socket dead"}
+    end;
 
 %% WAIT INF
 

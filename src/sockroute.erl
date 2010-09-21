@@ -274,6 +274,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 send_tcp(Socket, Thing) ->
+    send_tcp(lists:member(Socket,erlang:ports()),Socket, Thing).
+
+send_tcp(false, _Socket, _Thing) ->
+    ok; %% port dead
+send_tcp(true, Socket, Thing) ->
     case (catch gen_tcp:send(Socket, Thing)) of
 	{error,einval} -> %% may be because of utf8?
 	    (catch gen_tcp:send(Socket, unicode:characters_to_binary(Thing)));
