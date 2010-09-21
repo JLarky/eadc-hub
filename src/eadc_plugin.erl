@@ -37,7 +37,7 @@ hook(Hook, Plugin, Args) ->
 	    New_Args
     end.
 
-%% @spec set_plugins() -> PluginList
+%% @spec get_plugins() -> PluginList
 %% PluginList = [Plugin_module]
 %% @doc gets plugin lists
 get_plugins() ->

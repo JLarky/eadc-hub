@@ -48,6 +48,6 @@ $(EBIN_DIR)/%.$(EMULATOR): %.erl
 	$(ERLC) $(ERLC_FLAGS) -o . $<
 
 $(DOC_DIR)/%.html: %.erl
-	$(ERL) -noshell -run edoc file $< -run init stop
+	$(ERL) -noinput -eval 'edoc:file("$<")' -s init stop
 	mv *.html $(DOC_DIR)
 

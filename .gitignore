@@ -8,13 +8,7 @@ ebin/*.boot
 ebin/*.script
 ebin/*.app
 ebin/*.rel
-ebin/*.txt
-ebin/*@*
 error.log
 Mnesia*
 priv/*.so
 priv/*.dll
-deps/*/ebin/*.beam
-deps/*/ebin/*.app
-deps/*/priv/*.so
-deps/*/priv/*.dll
