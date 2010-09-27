@@ -1,1 +1,3 @@
 - add ADCS mode to hub
+- add init.d scripts for RedHat based distros
+- make .spec file for RPM based distros
