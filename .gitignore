@@ -18,3 +18,4 @@ deps/*/ebin/*.beam
 deps/*/ebin/*.app
 deps/*/priv/*.so
 deps/*/priv/*.dll
+rel/eadc
