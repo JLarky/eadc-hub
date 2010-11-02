@@ -1,3 +1,4 @@
 #/bin/bash
-
-(cd `dirname $0`/ebin && erl -pa ../deps/*/ebin/ -sname eadc -boot eadc $@)
+(cd `dirname $0`/ebin &&
+([[ -f ../priv/tiger_drv.so ]] || (mkdir -p ../priv && cp ../deps/tiger/priv/*.so ../priv/) ) &&
+erl -pa ../deps/*/ebin/ -boot start_sasl -sname eadc -eval "application:start(tiger)" -eval "application:start(eadc)" $@)
