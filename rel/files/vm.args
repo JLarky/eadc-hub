@@ -1,13 +1,18 @@
-
 ## Name of the node
+## (Changing this can affect on availability mnesia and therefore hubs settings)
 -name eadc@127.0.0.1
 
+## application start
+## FIXME: should be moved into .boot
+-eval "application:start(tiger)" -eval "application:start(eadc)"
+
 ## Cookie for distributed erlang
--setcookie eadc
+## Used when network interaction is needed
+#-setcookie eadc
 
 ## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
 ## (Disabled by default..use with caution!)
-##-heart
+#-heart
 
 ## Enable kernel poll and a few async threads
 +K true
