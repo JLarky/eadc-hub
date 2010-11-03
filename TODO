@@ -1,5 +1,2 @@
 - add ADCS mode to hub
-
-current:
-- rebar
-  - get deps
+- deb/rpm packages
