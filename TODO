@@ -1,2 +1,13 @@
 - add ADCS mode to hub
 - deb/rpm packages
+
+/etc/eadc-hub/
+/usr/lib/eadc-hub/{bin,erts-5.8,lib,releases}
+/var/log/eadc-hub/
+/var/run/eadc-hub/
+/var/spool/eadc-hub/Mnesia
+
+later:
+ /usr/src/eadc-hub/src/{,plugins}
+ /var/run/eadc-hub.pid
+ /usr/share/man/man1/eadc-hub.1.gz

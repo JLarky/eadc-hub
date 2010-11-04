@@ -1,11 +1,14 @@
 #!/bin/bash
 
-RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)
+RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)                      # /usr/lib/eadc-hub
+RUNNER_ROOT=$(cd ${RUNNER_SCRIPT_DIR}/../../../../ && pwd)  # /
 
 RUNNER_BASE_DIR=${RUNNER_SCRIPT_DIR%/*}
-RUNNER_ETC_DIR=$RUNNER_BASE_DIR/etc
-RUNNER_LOG_DIR=$RUNNER_BASE_DIR/log
-PIPE_DIR=/tmp/$RUNNER_BASE_DIR/
+RUNNER_ETC_DIR=${RUNNER_ROOT}/etc/eadc-hub
+RUNNER_LOG_DIR=$RUNNER_ROOT/var/log/eadc-hub
+export ERL_CRASH_DUMP=$RUNNER_LOG_DIR/erl_crash.dump.`date "+%Y%m%d-%H%M%S"`
+PIPE_DIR=$RUNNER_ROOT/var/run/eadc-hub
+MNESIA_DIR=$RUNNER_ROOT/var/spool/eadc-hub/Mnesia
 RUNNER_USER=
 
 # Make sure this script is running as the appropriate user
@@ -64,12 +67,15 @@ case "$1" in
 
     stop)
         # Wait for the node to completely stop...
-        PID=`ps -ef|grep "$RUNNER_BASE_DIR/.*/[b]eam.smp|awk '{print $2}'"`
+        PID=`ps -ef|grep "$RUNNER_BASE_DIR/.*/[b]eam.smp"|awk '{print $2}'`
         $NODETOOL stop
         while `kill -0 $PID 2>/dev/null`;
         do
              sleep 1
+             echo -n '.';let 'i=i+1'
+             [[ $i == 10 ]] && (echo "killing $PID"; kill $PID)
         done
+        echo 'ok'
         ;;
 
     restart)
@@ -96,7 +102,7 @@ case "$1" in
         fi
 
         shift
-        $ERTS_PATH/to_erl $PIPE_DIR
+        $ERTS_PATH/to_erl $PIPE_DIR/
         ;;
 
     console)
@@ -105,7 +111,7 @@ case "$1" in
         BINDIR=$ROOTDIR/erts-$ERTS_VSN/bin
         EMU=beam
         PROGNAME=`echo $0 | sed 's/.*\\///'`
-        CMD="$BINDIR/erlexec -boot $RUNNER_BASE_DIR/releases/$APP_VSN/$SCRIPT -embedded -config $RUNNER_ETC_DIR/app.config -args_file $RUNNER_ETC_DIR/vm.args -- ${1+"$@"}"
+        CMD="$BINDIR/erlexec -mnesia dir '$MNESIA_DIR' -boot $RUNNER_BASE_DIR/releases/$APP_VSN/$SCRIPT -embedded -config $RUNNER_ETC_DIR/app.config -args_file $RUNNER_ETC_DIR/vm.args -- ${1+"$@"}"
         export EMU
         export ROOTDIR
         export BINDIR
