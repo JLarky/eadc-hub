@@ -1,0 +1,10 @@
+#!/bin/sh
+
+if [ $1 = 'configure' ]; then
+   update-rc.d eadc-hub defaults
+   if which invoke-rc.d >/dev/null 2>&1; then
+     invoke-rc.d eadc-hub start
+   else
+     /etc/init.d/eadc-hub start
+   fi
+fi

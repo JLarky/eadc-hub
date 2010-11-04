@@ -1,14 +1,13 @@
 ## Name of the node
 ## (Changing this can affect on availability mnesia and therefore hubs settings)
--name eadc2@127.0.0.1
+-name eadc@127.0.0.1
 
 ## Cookie for distributed erlang
-## Used when network interaction is needed
 -setcookie eadc
 
 ## Listen port (requeres root for ports < 1024)
 ## Default: 4111
-#-lisen_port 4111
+#-listen_port 411
 
 ## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
 ## (Disabled by default..use with caution!)

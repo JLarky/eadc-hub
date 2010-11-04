@@ -1,0 +1,15 @@
+Package: eadc-hub
+Version: 0.4
+Architecture: i386
+Depends: bash
+Source: eadc-hub
+Section: net
+Priority: extra
+Maintainer: JLarky <jlarky@gmail.com>
+Build-Depends: debhelper (>= 7.0.50~)
+Standards-Version: 3.8.4
+Homepage: <insert the upstream URL, if relevant>
+Vcs-Git: git://github.com/JLarky/eadc-hub.git
+Vcs-Browser: https://github.com/JLarky/eadc-hub
+Description: ADC hub software written using Erlang/OTP
+ ADC (Advanced Direct Connect) hub software written using Erlang/OTP

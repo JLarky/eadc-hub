@@ -53,6 +53,7 @@ NODETOOL="$ERTS_PATH/escript $ERTS_PATH/nodetool $NAME_ARG $COOKIE_ARG"
 # Check the first argument for instructions
 case "$1" in
     start)
+	echo -n "Staring ADC hub: eadc-hub"
         # Make sure there is not already a node running
         RES=`$NODETOOL ping`
         if [ "$RES" == "pong" ]; then
@@ -63,19 +64,21 @@ case "$1" in
         mkdir -p $PIPE_DIR
         # Note the trailing slash on $PIPE_DIR/
         $ERTS_PATH/run_erl -daemon $PIPE_DIR/ $RUNNER_LOG_DIR "exec $RUNNER_BASE_DIR/bin/$SCRIPT console" 2>&1
+	echo "."
         ;;
 
     stop)
+	echo -n "Stopping ADC hub: eadc-hub"
         # Wait for the node to completely stop...
         PID=`ps -ef|grep "$RUNNER_BASE_DIR/.*/[b]eam.smp"|awk '{print $2}'`
-        $NODETOOL stop
+        $NODETOOL stop >/dev/null
         while `kill -0 $PID 2>/dev/null`;
         do
              sleep 1
              echo -n '.';let 'i=i+1'
              [[ $i == 10 ]] && (echo "killing $PID"; kill $PID)
         done
-        echo 'ok'
+        echo '.'
         ;;
 
     restart)
