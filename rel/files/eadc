@@ -8,8 +8,8 @@ RUNNER_ETC_DIR=${RUNNER_ROOT}/etc/eadc-hub
 RUNNER_LOG_DIR=$RUNNER_ROOT/var/log/eadc-hub
 export ERL_CRASH_DUMP=$RUNNER_LOG_DIR/erl_crash.dump.`date "+%Y%m%d-%H%M%S"`
 PIPE_DIR=$RUNNER_ROOT/var/run/eadc-hub
-MNESIA_DIR=$RUNNER_ROOT/var/spool/eadc-hub/Mnesia
-RUNNER_USER=
+MNESIA_DIR=$RUNNER_ROOT/var/lib/eadc-hub/Mnesia
+RUNNER_USER=nobody
 
 # Make sure this script is running as the appropriate user
 if [ ! -z "$RUNNER_USER" ] && [ `whoami` != "$RUNNER_USER" ]; then

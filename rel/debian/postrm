@@ -12,8 +12,8 @@ case "$1" in
     rm -rf /var/run/eadc-hub || true
 
     if [ "$1" = "purge" ]; then
-        rm -rf /var/spool/eadc-hub/Mnesia || true
-	rmdir -p /var/spool/eadc-hub/Mnesia || true 2>/dev/null
+        rm -rf /var/lib/eadc-hub/Mnesia || true
+	rmdir -p /var/lib/eadc-hub/Mnesia || true 2>/dev/null
 	rm -rf /etc/eadc-hub || true
 	update-rc.d eadc-hub remove || true
     fi

@@ -12,6 +12,7 @@ build:
 
 build-deb:
 	sudo chown root.root -R $(DESTDIR)
+	sudo chown nobody.nogroup -R $(DESTDIR)/var
 	dpkg -b $(DESTDIR)
 
 install:
@@ -26,7 +27,7 @@ install:
 	cp eadc/etc/vm.args $(DESTDIR)/etc/eadc-hub
 	install -d $(DESTDIR)/etc/init.d
 	install -m 0755 files/eadc-hub.init.d $(DESTDIR)/etc/init.d/eadc-hub
-	install -d $(DESTDIR)/var/spool/eadc-hub/Mnesia
+	install -d $(DESTDIR)/var/lib/eadc-hub/Mnesia
 	install -d $(DESTDIR)/var/run/eadc-hub
 
 	install -d $(DESTDIR)/DEBIAN

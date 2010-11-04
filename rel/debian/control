@@ -1,7 +1,7 @@
 Package: eadc-hub
 Version: 0.4
 Architecture: i386
-Depends: bash
+Depends: bash, sudo
 Source: eadc-hub
 Section: net
 Priority: extra
